@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -10,18 +10,16 @@
 'use strict';
 
 let React;
-let ReactDOMClient;
-let act;
+let ReactDOM;
 
 describe('ReactErrorBoundariesHooks', () => {
   beforeEach(() => {
     jest.resetModules();
+    ReactDOM = require('react-dom');
     React = require('react');
-    ReactDOMClient = require('react-dom/client');
-    act = require('internal-test-utils').act;
   });
 
-  it('should preserve hook order if errors are caught', async () => {
+  it('should preserve hook order if errors are caught', () => {
     function ErrorThrower() {
       React.useMemo(() => undefined, []);
       throw new Error('expected');
@@ -59,15 +57,10 @@ describe('ReactErrorBoundariesHooks', () => {
     }
 
     const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    await act(() => {
-      root.render(<App />);
-    });
+    ReactDOM.render(<App />, container);
 
-    await expect(
-      act(() => {
-        root.render(<App />);
-      }),
-    ).resolves.not.toThrow();
+    expect(() => {
+      ReactDOM.render(<App />, container);
+    }).not.toThrow();
   });
 });

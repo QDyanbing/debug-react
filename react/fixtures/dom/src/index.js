@@ -6,16 +6,8 @@ loadReact()
   .then(App => {
     const {React, ReactDOM} = window;
 
-    if (typeof window.ReactDOMClient !== 'undefined') {
-      // we are in a React that only supports modern roots
-
-      ReactDOM.createRoot(document.getElementById('root')).render(
-        React.createElement(App.default)
-      );
-    } else {
-      ReactDOM.render(
-        React.createElement(App.default),
-        document.getElementById('root')
-      );
-    }
+    ReactDOM.render(
+      React.createElement(App.default),
+      document.getElementById('root')
+    );
   });

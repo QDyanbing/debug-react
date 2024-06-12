@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -8,20 +8,17 @@
  */
 
 import type {
-  Awaited,
+  MutableSource,
+  MutableSourceGetSnapshotFn,
+  MutableSourceSubscribeFn,
   ReactContext,
+  ReactProviderType,
   StartTransitionOptions,
-  Usable,
-  Thenable,
-  ReactDebugInfo,
 } from 'shared/ReactTypes';
 import type {
-  ContextDependency,
-  Dependencies,
   Fiber,
   Dispatcher as DispatcherType,
 } from 'react-reconciler/src/ReactInternalTypes';
-import type {TransitionStatus} from 'react-reconciler/src/ReactFiberConfig';
 
 import ErrorStackParser from 'error-stack-parser';
 import assign from 'shared/assign';
@@ -32,23 +29,16 @@ import {
   ContextProvider,
   ForwardRef,
 } from 'react-reconciler/src/ReactWorkTags';
-import {
-  REACT_MEMO_CACHE_SENTINEL,
-  REACT_CONTEXT_TYPE,
-} from 'shared/ReactSymbols';
-import hasOwnProperty from 'shared/hasOwnProperty';
 
-type CurrentDispatcherRef = typeof ReactSharedInternals;
+type CurrentDispatcherRef = typeof ReactSharedInternals.ReactCurrentDispatcher;
 
 // Used to track hooks called during a render
 
 type HookLogEntry = {
-  displayName: string | null,
   primitive: string,
   stackError: Error,
   value: mixed,
-  debugInfo: ReactDebugInfo | null,
-  dispatcherHookName: string,
+  ...
 };
 
 let hookLog: Array<HookLogEntry> = [];
@@ -70,13 +60,13 @@ function getPrimitiveStackCache(): Map<string, Array<any>> {
   // This initializes a cache of all primitive hooks so that the top
   // most stack frames added by calling the primitive hook can be removed.
   if (primitiveStackCache === null) {
-    const cache = new Map<string, Array<any>>();
+    const cache = new Map();
     let readHookLog;
     try {
       // Use all hooks here to add them to the hook log.
       Dispatcher.useContext(({_currentValue: null}: any));
       Dispatcher.useState(null);
-      Dispatcher.useReducer((s: mixed, a: mixed) => s, null);
+      Dispatcher.useReducer((s, a) => s, null);
       Dispatcher.useRef(null);
       if (typeof Dispatcher.useCacheRefresh === 'function') {
         // This type check is for Flow only.
@@ -88,58 +78,7 @@ function getPrimitiveStackCache(): Map<string, Array<any>> {
       Dispatcher.useImperativeHandle(undefined, () => null);
       Dispatcher.useDebugValue(null);
       Dispatcher.useCallback(() => {});
-      Dispatcher.useTransition();
-      Dispatcher.useSyncExternalStore(
-        () => () => {},
-        () => null,
-        () => null,
-      );
-      Dispatcher.useDeferredValue(null);
       Dispatcher.useMemo(() => null);
-      if (typeof Dispatcher.useMemoCache === 'function') {
-        // This type check is for Flow only.
-        Dispatcher.useMemoCache(0);
-      }
-      if (typeof Dispatcher.useOptimistic === 'function') {
-        // This type check is for Flow only.
-        Dispatcher.useOptimistic(null, (s: mixed, a: mixed) => s);
-      }
-      if (typeof Dispatcher.useFormState === 'function') {
-        // This type check is for Flow only.
-        Dispatcher.useFormState((s: mixed, p: mixed) => s, null);
-      }
-      if (typeof Dispatcher.useActionState === 'function') {
-        // This type check is for Flow only.
-        Dispatcher.useActionState((s: mixed, p: mixed) => s, null);
-      }
-      if (typeof Dispatcher.use === 'function') {
-        // This type check is for Flow only.
-        Dispatcher.use(
-          ({
-            $$typeof: REACT_CONTEXT_TYPE,
-            _currentValue: null,
-          }: any),
-        );
-        Dispatcher.use({
-          then() {},
-          status: 'fulfilled',
-          value: null,
-        });
-        try {
-          Dispatcher.use(
-            ({
-              then() {},
-            }: any),
-          );
-        } catch (x) {}
-      }
-
-      Dispatcher.useId();
-
-      if (typeof Dispatcher.useHostTransitionStatus === 'function') {
-        // This type check is for Flow only.
-        Dispatcher.useHostTransitionStatus();
-      }
     } finally {
       readHookLog = hookLog;
       hookLog = [];
@@ -153,10 +92,7 @@ function getPrimitiveStackCache(): Map<string, Array<any>> {
   return primitiveStackCache;
 }
 
-let currentFiber: null | Fiber = null;
 let currentHook: null | Hook = null;
-let currentContextDependency: null | ContextDependency<mixed> = null;
-
 function nextHook(): null | Hook {
   const hook = currentHook;
   if (hook !== null) {
@@ -165,115 +101,22 @@ function nextHook(): null | Hook {
   return hook;
 }
 
-function readContext<T>(context: ReactContext<T>): T {
-  if (currentFiber === null) {
-    // Hook inspection without access to the Fiber tree
-    // e.g. when warming up the primitive stack cache or during `ReactDebugTools.inspectHooks()`.
-    return context._currentValue;
-  } else {
-    if (currentContextDependency === null) {
-      throw new Error(
-        'Context reads do not line up with context dependencies. This is a bug in React Debug Tools.',
-      );
-    }
-
-    let value: T;
-    // For now we don't expose readContext usage in the hooks debugging info.
-    if (hasOwnProperty.call(currentContextDependency, 'memoizedValue')) {
-      // $FlowFixMe[incompatible-use] Flow thinks `hasOwnProperty` mutates `currentContextDependency`
-      value = ((currentContextDependency.memoizedValue: any): T);
-
-      // $FlowFixMe[incompatible-use] Flow thinks `hasOwnProperty` mutates `currentContextDependency`
-      currentContextDependency = currentContextDependency.next;
-    } else {
-      // Before React 18, we did not have `memoizedValue` so we rely on `setupContexts` in those versions.
-      // Multiple reads of the same context were also only tracked as a single dependency.
-      // We just give up on advancing context dependencies and solely rely on `setupContexts`.
-      value = context._currentValue;
-    }
-
-    return value;
-  }
+function getCacheForType<T>(resourceType: () => T): T {
+  throw new Error('Not implemented.');
 }
 
-const SuspenseException: mixed = new Error(
-  "Suspense Exception: This is not a real error! It's an implementation " +
-    'detail of `use` to interrupt the current render. You must either ' +
-    'rethrow it immediately, or move the `use` call outside of the ' +
-    '`try/catch` block. Capturing without rethrowing will lead to ' +
-    'unexpected behavior.\n\n' +
-    'To handle async errors, wrap your component in an error boundary, or ' +
-    "call the promise's `.catch` method and pass the result to `use`",
-);
-
-function use<T>(usable: Usable<T>): T {
-  if (usable !== null && typeof usable === 'object') {
-    // $FlowFixMe[method-unbinding]
-    if (typeof usable.then === 'function') {
-      const thenable: Thenable<any> = (usable: any);
-      switch (thenable.status) {
-        case 'fulfilled': {
-          const fulfilledValue: T = thenable.value;
-          hookLog.push({
-            displayName: null,
-            primitive: 'Promise',
-            stackError: new Error(),
-            value: fulfilledValue,
-            debugInfo:
-              thenable._debugInfo === undefined ? null : thenable._debugInfo,
-            dispatcherHookName: 'Use',
-          });
-          return fulfilledValue;
-        }
-        case 'rejected': {
-          const rejectedError = thenable.reason;
-          throw rejectedError;
-        }
-      }
-      // If this was an uncached Promise we have to abandon this attempt
-      // but we can still emit anything up until this point.
-      hookLog.push({
-        displayName: null,
-        primitive: 'Unresolved',
-        stackError: new Error(),
-        value: thenable,
-        debugInfo:
-          thenable._debugInfo === undefined ? null : thenable._debugInfo,
-        dispatcherHookName: 'Use',
-      });
-      throw SuspenseException;
-    } else if (usable.$$typeof === REACT_CONTEXT_TYPE) {
-      const context: ReactContext<T> = (usable: any);
-      const value = readContext(context);
-
-      hookLog.push({
-        displayName: context.displayName || 'Context',
-        primitive: 'Context (use)',
-        stackError: new Error(),
-        value,
-        debugInfo: null,
-        dispatcherHookName: 'Use',
-      });
-
-      return value;
-    }
-  }
-
-  // eslint-disable-next-line react-internal/safe-string-coercion
-  throw new Error('An unsupported type was passed to use(): ' + String(usable));
+function readContext<T>(context: ReactContext<T>): T {
+  // For now we don't expose readContext usage in the hooks debugging info.
+  return context._currentValue;
 }
 
 function useContext<T>(context: ReactContext<T>): T {
-  const value = readContext(context);
   hookLog.push({
-    displayName: context.displayName || null,
     primitive: 'Context',
     stackError: new Error(),
-    value: value,
-    debugInfo: null,
-    dispatcherHookName: 'Context',
+    value: context._currentValue,
   });
-  return value;
+  return context._currentValue;
 }
 
 function useState<S>(
@@ -284,17 +127,10 @@ function useState<S>(
     hook !== null
       ? hook.memoizedState
       : typeof initialState === 'function'
-      ? // $FlowFixMe[incompatible-use]: Flow doesn't like mixed types
+      ? // $FlowFixMe: Flow doesn't like mixed types
         initialState()
       : initialState;
-  hookLog.push({
-    displayName: null,
-    primitive: 'State',
-    stackError: new Error(),
-    value: state,
-    debugInfo: null,
-    dispatcherHookName: 'State',
-  });
+  hookLog.push({primitive: 'State', stackError: new Error(), value: state});
   return [state, (action: BasicStateAction<S>) => {}];
 }
 
@@ -311,26 +147,20 @@ function useReducer<S, I, A>(
     state = init !== undefined ? init(initialArg) : ((initialArg: any): S);
   }
   hookLog.push({
-    displayName: null,
     primitive: 'Reducer',
     stackError: new Error(),
     value: state,
-    debugInfo: null,
-    dispatcherHookName: 'Reducer',
   });
   return [state, (action: A) => {}];
 }
 
-function useRef<T>(initialValue: T): {current: T} {
+function useRef<T>(initialValue: T): {|current: T|} {
   const hook = nextHook();
   const ref = hook !== null ? hook.memoizedState : {current: initialValue};
   hookLog.push({
-    displayName: null,
     primitive: 'Ref',
     stackError: new Error(),
     value: ref.current,
-    debugInfo: null,
-    dispatcherHookName: 'Ref',
   });
   return ref;
 }
@@ -338,12 +168,9 @@ function useRef<T>(initialValue: T): {current: T} {
 function useCacheRefresh(): () => void {
   const hook = nextHook();
   hookLog.push({
-    displayName: null,
     primitive: 'CacheRefresh',
     stackError: new Error(),
     value: hook !== null ? hook.memoizedState : function refresh() {},
-    debugInfo: null,
-    dispatcherHookName: 'CacheRefresh',
   });
   return () => {};
 }
@@ -354,12 +181,9 @@ function useLayoutEffect(
 ): void {
   nextHook();
   hookLog.push({
-    displayName: null,
     primitive: 'LayoutEffect',
     stackError: new Error(),
     value: create,
-    debugInfo: null,
-    dispatcherHookName: 'LayoutEffect',
   });
 }
 
@@ -369,12 +193,9 @@ function useInsertionEffect(
 ): void {
   nextHook();
   hookLog.push({
-    displayName: null,
     primitive: 'InsertionEffect',
     stackError: new Error(),
     value: create,
-    debugInfo: null,
-    dispatcherHookName: 'InsertionEffect',
   });
 }
 
@@ -383,18 +204,11 @@ function useEffect(
   inputs: Array<mixed> | void | null,
 ): void {
   nextHook();
-  hookLog.push({
-    displayName: null,
-    primitive: 'Effect',
-    stackError: new Error(),
-    value: create,
-    debugInfo: null,
-    dispatcherHookName: 'Effect',
-  });
+  hookLog.push({primitive: 'Effect', stackError: new Error(), value: create});
 }
 
 function useImperativeHandle<T>(
-  ref: {current: T | null} | ((inst: T | null) => mixed) | null | void,
+  ref: {|current: T | null|} | ((inst: T | null) => mixed) | null | void,
   create: () => T,
   inputs: Array<mixed> | void | null,
 ): void {
@@ -403,40 +217,31 @@ function useImperativeHandle<T>(
   // and if there is a ref callback it might not store it but if it does we
   // have no way of knowing where. So let's only enable introspection of the
   // ref itself if it is using the object form.
-  let instance: ?T = undefined;
+  let instance = undefined;
   if (ref !== null && typeof ref === 'object') {
     instance = ref.current;
   }
   hookLog.push({
-    displayName: null,
     primitive: 'ImperativeHandle',
     stackError: new Error(),
     value: instance,
-    debugInfo: null,
-    dispatcherHookName: 'ImperativeHandle',
   });
 }
 
 function useDebugValue(value: any, formatterFn: ?(value: any) => any) {
   hookLog.push({
-    displayName: null,
     primitive: 'DebugValue',
     stackError: new Error(),
     value: typeof formatterFn === 'function' ? formatterFn(value) : value,
-    debugInfo: null,
-    dispatcherHookName: 'DebugValue',
   });
 }
 
 function useCallback<T>(callback: T, inputs: Array<mixed> | void | null): T {
   const hook = nextHook();
   hookLog.push({
-    displayName: null,
     primitive: 'Callback',
     stackError: new Error(),
     value: hook !== null ? hook.memoizedState[0] : callback,
-    debugInfo: null,
-    dispatcherHookName: 'Callback',
   });
   return callback;
 }
@@ -447,14 +252,24 @@ function useMemo<T>(
 ): T {
   const hook = nextHook();
   const value = hook !== null ? hook.memoizedState[0] : nextCreate();
-  hookLog.push({
-    displayName: null,
-    primitive: 'Memo',
-    stackError: new Error(),
-    value,
-    debugInfo: null,
-    dispatcherHookName: 'Memo',
-  });
+  hookLog.push({primitive: 'Memo', stackError: new Error(), value});
+  return value;
+}
+
+function useMutableSource<Source, Snapshot>(
+  source: MutableSource<Source>,
+  getSnapshot: MutableSourceGetSnapshotFn<Source, Snapshot>,
+  subscribe: MutableSourceSubscribeFn<Source, Snapshot>,
+): Snapshot {
+  // useMutableSource() composes multiple hooks internally.
+  // Advance the current hook index the same number of times
+  // so that subsequent hooks have the right memoized state.
+  nextHook(); // MutableSource
+  nextHook(); // State
+  nextHook(); // Effect
+  nextHook(); // Effect
+  const value = getSnapshot(source._source);
+  hookLog.push({primitive: 'MutableSource', stackError: new Error(), value});
   return value;
 }
 
@@ -470,12 +285,9 @@ function useSyncExternalStore<T>(
   nextHook(); // Effect
   const value = getSnapshot();
   hookLog.push({
-    displayName: null,
     primitive: 'SyncExternalStore',
     stackError: new Error(),
     value,
-    debugInfo: null,
-    dispatcherHookName: 'SyncExternalStore',
   });
   return value;
 }
@@ -487,264 +299,43 @@ function useTransition(): [
   // useTransition() composes multiple hooks internally.
   // Advance the current hook index the same number of times
   // so that subsequent hooks have the right memoized state.
-  const stateHook = nextHook();
+  nextHook(); // State
   nextHook(); // Callback
-
-  const isPending = stateHook !== null ? stateHook.memoizedState : false;
-
   hookLog.push({
-    displayName: null,
     primitive: 'Transition',
     stackError: new Error(),
-    value: isPending,
-    debugInfo: null,
-    dispatcherHookName: 'Transition',
+    value: undefined,
   });
-  return [isPending, () => {}];
+  return [false, callback => {}];
 }
 
-function useDeferredValue<T>(value: T, initialValue?: T): T {
-  const hook = nextHook();
-  const prevValue = hook !== null ? hook.memoizedState : value;
+function useDeferredValue<T>(value: T): T {
+  // useDeferredValue() composes multiple hooks internally.
+  // Advance the current hook index the same number of times
+  // so that subsequent hooks have the right memoized state.
+  nextHook(); // State
+  nextHook(); // Effect
   hookLog.push({
-    displayName: null,
     primitive: 'DeferredValue',
     stackError: new Error(),
-    value: prevValue,
-    debugInfo: null,
-    dispatcherHookName: 'DeferredValue',
+    value,
   });
-  return prevValue;
+  return value;
 }
 
 function useId(): string {
   const hook = nextHook();
   const id = hook !== null ? hook.memoizedState : '';
   hookLog.push({
-    displayName: null,
     primitive: 'Id',
     stackError: new Error(),
     value: id,
-    debugInfo: null,
-    dispatcherHookName: 'Id',
   });
   return id;
 }
 
-// useMemoCache is an implementation detail of Forget's memoization
-// it should not be called directly in user-generated code
-function useMemoCache(size: number): Array<any> {
-  const fiber = currentFiber;
-  // Don't throw, in case this is called from getPrimitiveStackCache
-  if (fiber == null) {
-    return [];
-  }
-
-  // $FlowFixMe[incompatible-use]: updateQueue is mixed
-  const memoCache = fiber.updateQueue?.memoCache;
-  if (memoCache == null) {
-    return [];
-  }
-
-  let data = memoCache.data[memoCache.index];
-  if (data === undefined) {
-    data = memoCache.data[memoCache.index] = new Array(size);
-    for (let i = 0; i < size; i++) {
-      data[i] = REACT_MEMO_CACHE_SENTINEL;
-    }
-  }
-
-  // We don't write anything to hookLog on purpose, so this hook remains invisible to users.
-
-  memoCache.index++;
-  return data;
-}
-
-function useOptimistic<S, A>(
-  passthrough: S,
-  reducer: ?(S, A) => S,
-): [S, (A) => void] {
-  const hook = nextHook();
-  let state;
-  if (hook !== null) {
-    state = hook.memoizedState;
-  } else {
-    state = passthrough;
-  }
-  hookLog.push({
-    displayName: null,
-    primitive: 'Optimistic',
-    stackError: new Error(),
-    value: state,
-    debugInfo: null,
-    dispatcherHookName: 'Optimistic',
-  });
-  return [state, (action: A) => {}];
-}
-
-function useFormState<S, P>(
-  action: (Awaited<S>, P) => S,
-  initialState: Awaited<S>,
-  permalink?: string,
-): [Awaited<S>, (P) => void, boolean] {
-  const hook = nextHook(); // FormState
-  nextHook(); // PendingState
-  nextHook(); // ActionQueue
-  const stackError = new Error();
-  let value;
-  let debugInfo = null;
-  let error = null;
-
-  if (hook !== null) {
-    const actionResult = hook.memoizedState;
-    if (
-      typeof actionResult === 'object' &&
-      actionResult !== null &&
-      // $FlowFixMe[method-unbinding]
-      typeof actionResult.then === 'function'
-    ) {
-      const thenable: Thenable<Awaited<S>> = (actionResult: any);
-      switch (thenable.status) {
-        case 'fulfilled': {
-          value = thenable.value;
-          debugInfo =
-            thenable._debugInfo === undefined ? null : thenable._debugInfo;
-          break;
-        }
-        case 'rejected': {
-          const rejectedError = thenable.reason;
-          error = rejectedError;
-          break;
-        }
-        default:
-          // If this was an uncached Promise we have to abandon this attempt
-          // but we can still emit anything up until this point.
-          error = SuspenseException;
-          debugInfo =
-            thenable._debugInfo === undefined ? null : thenable._debugInfo;
-          value = thenable;
-      }
-    } else {
-      value = (actionResult: any);
-    }
-  } else {
-    value = initialState;
-  }
-
-  hookLog.push({
-    displayName: null,
-    primitive: 'FormState',
-    stackError: stackError,
-    value: value,
-    debugInfo: debugInfo,
-    dispatcherHookName: 'FormState',
-  });
-
-  if (error !== null) {
-    throw error;
-  }
-
-  // value being a Thenable is equivalent to error being not null
-  // i.e. we only reach this point with Awaited<S>
-  const state = ((value: any): Awaited<S>);
-
-  // TODO: support displaying pending value
-  return [state, (payload: P) => {}, false];
-}
-
-function useActionState<S, P>(
-  action: (Awaited<S>, P) => S,
-  initialState: Awaited<S>,
-  permalink?: string,
-): [Awaited<S>, (P) => void, boolean] {
-  const hook = nextHook(); // FormState
-  nextHook(); // PendingState
-  nextHook(); // ActionQueue
-  const stackError = new Error();
-  let value;
-  let debugInfo = null;
-  let error = null;
-
-  if (hook !== null) {
-    const actionResult = hook.memoizedState;
-    if (
-      typeof actionResult === 'object' &&
-      actionResult !== null &&
-      // $FlowFixMe[method-unbinding]
-      typeof actionResult.then === 'function'
-    ) {
-      const thenable: Thenable<Awaited<S>> = (actionResult: any);
-      switch (thenable.status) {
-        case 'fulfilled': {
-          value = thenable.value;
-          debugInfo =
-            thenable._debugInfo === undefined ? null : thenable._debugInfo;
-          break;
-        }
-        case 'rejected': {
-          const rejectedError = thenable.reason;
-          error = rejectedError;
-          break;
-        }
-        default:
-          // If this was an uncached Promise we have to abandon this attempt
-          // but we can still emit anything up until this point.
-          error = SuspenseException;
-          debugInfo =
-            thenable._debugInfo === undefined ? null : thenable._debugInfo;
-          value = thenable;
-      }
-    } else {
-      value = (actionResult: any);
-    }
-  } else {
-    value = initialState;
-  }
-
-  hookLog.push({
-    displayName: null,
-    primitive: 'ActionState',
-    stackError: stackError,
-    value: value,
-    debugInfo: debugInfo,
-    dispatcherHookName: 'ActionState',
-  });
-
-  if (error !== null) {
-    throw error;
-  }
-
-  // value being a Thenable is equivalent to error being not null
-  // i.e. we only reach this point with Awaited<S>
-  const state = ((value: any): Awaited<S>);
-
-  // TODO: support displaying pending value
-  return [state, (payload: P) => {}, false];
-}
-
-function useHostTransitionStatus(): TransitionStatus {
-  const status = readContext<TransitionStatus>(
-    // $FlowFixMe[prop-missing] `readContext` only needs _currentValue
-    ({
-      // $FlowFixMe[incompatible-cast] TODO: Incorrect bottom value without access to Fiber config.
-      _currentValue: null,
-    }: ReactContext<TransitionStatus>),
-  );
-
-  hookLog.push({
-    displayName: null,
-    primitive: 'HostTransitionStatus',
-    stackError: new Error(),
-    value: status,
-    debugInfo: null,
-    dispatcherHookName: 'HostTransitionStatus',
-  });
-
-  return status;
-}
-
 const Dispatcher: DispatcherType = {
-  use,
+  getCacheForType,
   readContext,
   useCacheRefresh,
   useCallback,
@@ -755,24 +346,20 @@ const Dispatcher: DispatcherType = {
   useLayoutEffect,
   useInsertionEffect,
   useMemo,
-  useMemoCache,
-  useOptimistic,
   useReducer,
   useRef,
   useState,
   useTransition,
+  useMutableSource,
   useSyncExternalStore,
   useDeferredValue,
   useId,
-  useFormState,
-  useActionState,
-  useHostTransitionStatus,
 };
 
 // create a proxy to throw a custom error
 // in case future versions of React adds more hooks
 const DispatcherProxyHandler = {
-  get(target: DispatcherType, prop: string) {
+  get(target, prop) {
     if (target.hasOwnProperty(prop)) {
       return target[prop];
     }
@@ -784,11 +371,7 @@ const DispatcherProxyHandler = {
   },
 };
 
-// `Proxy` may not exist on some platforms
-const DispatcherProxy =
-  typeof Proxy === 'undefined'
-    ? Dispatcher
-    : new Proxy(Dispatcher, DispatcherProxyHandler);
+const DispatcherProxy = new Proxy(Dispatcher, DispatcherProxyHandler);
 
 // Inspect
 
@@ -805,8 +388,8 @@ export type HooksNode = {
   name: string,
   value: mixed,
   subHooks: Array<HooksNode>,
-  debugInfo: null | ReactDebugInfo,
-  hookSource: null | HookSource,
+  hookSource?: HookSource,
+  ...
 };
 export type HooksTree = Array<HooksNode>;
 
@@ -817,7 +400,8 @@ export type HooksTree = Array<HooksNode>;
 // of a hook call. A simple way to demonstrate this is wrapping `new Error()`
 // in a wrapper constructor like a polyfill. That'll add an extra frame.
 // Similar things can happen with the call to the dispatcher. The top frame
-// may not be the primitive.
+// may not be the primitive. Likewise the primitive can have fewer stack frames
+// such as when a call to useState got inlined to use dispatcher.useState.
 //
 // We also can't assume that the last frame of the root call is the same
 // frame as the last frame of the hook call because long stack traces can be
@@ -825,7 +409,7 @@ export type HooksTree = Array<HooksNode>;
 
 let mostLikelyAncestorIndex = 0;
 
-function findSharedIndex(hookStack: any, rootStack: any, rootIndex: number) {
+function findSharedIndex(hookStack, rootStack, rootIndex) {
   const source = rootStack[rootIndex].source;
   hookSearch: for (let i = 0; i < hookStack.length; i++) {
     if (hookStack[i].source === source) {
@@ -846,7 +430,7 @@ function findSharedIndex(hookStack: any, rootStack: any, rootIndex: number) {
   return -1;
 }
 
-function findCommonAncestorIndex(rootStack: any, hookStack: any) {
+function findCommonAncestorIndex(rootStack, hookStack) {
   let rootIndex = findSharedIndex(
     hookStack,
     rootStack,
@@ -867,47 +451,49 @@ function findCommonAncestorIndex(rootStack: any, hookStack: any) {
   return -1;
 }
 
-function isReactWrapper(functionName: any, wrapperName: string) {
-  const hookName = parseHookName(functionName);
-  if (wrapperName === 'HostTransitionStatus') {
-    return hookName === wrapperName || hookName === 'FormStatus';
+function isReactWrapper(functionName, primitiveName) {
+  if (!functionName) {
+    return false;
   }
-
-  return hookName === wrapperName;
+  const expectedPrimitiveName = 'use' + primitiveName;
+  if (functionName.length < expectedPrimitiveName.length) {
+    return false;
+  }
+  return (
+    functionName.lastIndexOf(expectedPrimitiveName) ===
+    functionName.length - expectedPrimitiveName.length
+  );
 }
 
-function findPrimitiveIndex(hookStack: any, hook: HookLogEntry) {
+function findPrimitiveIndex(hookStack, hook) {
   const stackCache = getPrimitiveStackCache();
   const primitiveStack = stackCache.get(hook.primitive);
   if (primitiveStack === undefined) {
     return -1;
   }
   for (let i = 0; i < primitiveStack.length && i < hookStack.length; i++) {
-    // Note: there is no guarantee that we will find the top-most primitive frame in the stack
-    // For React Native (uses Hermes), these source fields will be identical and skipped
     if (primitiveStack[i].source !== hookStack[i].source) {
       // If the next two frames are functions called `useX` then we assume that they're part of the
-      // wrappers that the React package or other packages adds around the dispatcher.
+      // wrappers that the React packager or other packages adds around the dispatcher.
       if (
         i < hookStack.length - 1 &&
-        isReactWrapper(hookStack[i].functionName, hook.dispatcherHookName)
+        isReactWrapper(hookStack[i].functionName, hook.primitive)
       ) {
         i++;
       }
       if (
         i < hookStack.length - 1 &&
-        isReactWrapper(hookStack[i].functionName, hook.dispatcherHookName)
+        isReactWrapper(hookStack[i].functionName, hook.primitive)
       ) {
         i++;
       }
-
       return i;
     }
   }
   return -1;
 }
 
-function parseTrimmedStack(rootStack: any, hook: HookLogEntry) {
+function parseTrimmedStack(rootStack, hook) {
   // Get the stack trace between the primitive hook function and
   // the root function call. I.e. the stack frames of custom hooks.
   const hookStack = ErrorStackParser.parse(hook.stackError);
@@ -918,68 +504,39 @@ function parseTrimmedStack(rootStack: any, hook: HookLogEntry) {
     primitiveIndex === -1 ||
     rootIndex - primitiveIndex < 2
   ) {
-    if (primitiveIndex === -1) {
-      // Something went wrong. Give up.
-      return [null, null];
-    } else {
-      return [hookStack[primitiveIndex - 1], null];
-    }
+    // Something went wrong. Give up.
+    return null;
   }
-  return [
-    hookStack[primitiveIndex - 1],
-    hookStack.slice(primitiveIndex, rootIndex - 1),
-  ];
+  return hookStack.slice(primitiveIndex, rootIndex - 1);
 }
 
-function parseHookName(functionName: void | string): string {
+function parseCustomHookName(functionName: void | string): string {
   if (!functionName) {
     return '';
   }
-  let startIndex = functionName.lastIndexOf('[as ');
-
-  if (startIndex !== -1) {
-    // Workaround for sourcemaps in Jest and Chrome.
-    // In `node --enable-source-maps`, we don't see "Object.useHostTransitionStatus [as useFormStatus]" but "Object.useFormStatus"
-    // "Object.useHostTransitionStatus [as useFormStatus]" -> "useFormStatus"
-    return parseHookName(functionName.slice(startIndex + '[as '.length, -1));
-  }
-  startIndex = functionName.lastIndexOf('.');
+  let startIndex = functionName.lastIndexOf('.');
   if (startIndex === -1) {
     startIndex = 0;
-  } else {
-    startIndex += 1;
   }
-  if (functionName.slice(startIndex, startIndex + 3) === 'use') {
-    if (functionName.length - startIndex === 3) {
-      return 'Use';
-    }
+  if (functionName.substr(startIndex, 3) === 'use') {
     startIndex += 3;
   }
-  return functionName.slice(startIndex);
+  return functionName.substr(startIndex);
 }
 
 function buildTree(
-  rootStack: any,
-  readHookLog: Array<HookLogEntry>,
+  rootStack,
+  readHookLog,
+  includeHooksSource: boolean,
 ): HooksTree {
-  const rootChildren: Array<HooksNode> = [];
+  const rootChildren = [];
   let prevStack = null;
   let levelChildren = rootChildren;
   let nativeHookID = 0;
   const stackOfChildren = [];
   for (let i = 0; i < readHookLog.length; i++) {
     const hook = readHookLog[i];
-    const parseResult = parseTrimmedStack(rootStack, hook);
-    const primitiveFrame = parseResult[0];
-    const stack = parseResult[1];
-    let displayName = hook.displayName;
-    if (displayName === null && primitiveFrame !== null) {
-      displayName =
-        parseHookName(primitiveFrame.functionName) ||
-        // Older versions of React do not have sourcemaps.
-        // In those versions there was always a 1:1 mapping between wrapper and dispatcher method.
-        parseHookName(hook.dispatcherHookName);
-    }
+    const stack = parseTrimmedStack(rootStack, hook);
     if (stack !== null) {
       // Note: The indices 0 <= n < length-1 will contain the names.
       // The indices 1 <= n < length will contain the source locations.
@@ -1005,22 +562,24 @@ function buildTree(
       // The remaining part of the new stack are custom hooks. Push them
       // to the tree.
       for (let j = stack.length - commonSteps - 1; j >= 1; j--) {
-        const children: Array<HooksNode> = [];
+        const children = [];
         const stackFrame = stack[j];
         const levelChild: HooksNode = {
           id: null,
           isStateEditable: false,
-          name: parseHookName(stack[j - 1].functionName),
+          name: parseCustomHookName(stack[j - 1].functionName),
           value: undefined,
           subHooks: children,
-          debugInfo: null,
-          hookSource: {
+        };
+
+        if (includeHooksSource) {
+          levelChild.hookSource = {
             lineNumber: stackFrame.lineNumber,
             columnNumber: stackFrame.columnNumber,
             functionName: stackFrame.functionName,
             fileName: stackFrame.fileName,
-          },
-        };
+          };
+        }
 
         levelChildren.push(levelChild);
         stackOfChildren.push(levelChildren);
@@ -1028,48 +587,42 @@ function buildTree(
       }
       prevStack = stack;
     }
-    const {primitive, debugInfo} = hook;
+    const {primitive} = hook;
 
     // For now, the "id" of stateful hooks is just the stateful hook index.
     // Custom hooks have no ids, nor do non-stateful native hooks (e.g. Context, DebugValue).
     const id =
-      primitive === 'Context' ||
-      primitive === 'Context (use)' ||
-      primitive === 'DebugValue' ||
-      primitive === 'Promise' ||
-      primitive === 'Unresolved' ||
-      primitive === 'HostTransitionStatus'
+      primitive === 'Context' || primitive === 'DebugValue'
         ? null
         : nativeHookID++;
 
     // For the time being, only State and Reducer hooks support runtime overrides.
     const isStateEditable = primitive === 'Reducer' || primitive === 'State';
-    const name = displayName || primitive;
     const levelChild: HooksNode = {
       id,
       isStateEditable,
-      name,
+      name: primitive,
       value: hook.value,
       subHooks: [],
-      debugInfo: debugInfo,
-      hookSource: null,
     };
 
-    const hookSource: HookSource = {
-      lineNumber: null,
-      functionName: null,
-      fileName: null,
-      columnNumber: null,
-    };
-    if (stack && stack.length >= 1) {
-      const stackFrame = stack[0];
-      hookSource.lineNumber = stackFrame.lineNumber;
-      hookSource.functionName = stackFrame.functionName;
-      hookSource.fileName = stackFrame.fileName;
-      hookSource.columnNumber = stackFrame.columnNumber;
+    if (includeHooksSource) {
+      const hookSource: HookSource = {
+        lineNumber: null,
+        functionName: null,
+        fileName: null,
+        columnNumber: null,
+      };
+      if (stack && stack.length >= 1) {
+        const stackFrame = stack[0];
+        hookSource.lineNumber = stackFrame.lineNumber;
+        hookSource.functionName = stackFrame.functionName;
+        hookSource.fileName = stackFrame.fileName;
+        hookSource.columnNumber = stackFrame.columnNumber;
+      }
+
+      levelChild.hookSource = hookSource;
     }
-
-    levelChild.hookSource = hookSource;
 
     levelChildren.push(levelChild);
   }
@@ -1116,11 +669,6 @@ function processDebugValues(
 
 function handleRenderFunctionError(error: any): void {
   // original error might be any type.
-  if (error === SuspenseException) {
-    // An uncached Promise was used. We can't synchronously resolve the rest of
-    // the Hooks but we can at least show what ever we got so far.
-    return;
-  }
   if (
     error instanceof Error &&
     error.name === 'ReactDebugToolsUnsupportedHookError'
@@ -1131,7 +679,7 @@ function handleRenderFunctionError(error: any): void {
   // that the error is caused by user's code in renderFunction.
   // In this case, we should wrap the original error inside a custom error
   // so that devtools can give a clear message about it.
-  // $FlowFixMe[extra-arg]: Flow doesn't know about 2nd argument of Error constructor
+  // $FlowFixMe: Flow doesn't know about 2nd argument of Error constructor
   const wrapperError = new Error('Error rendering inspected component', {
     cause: error,
   });
@@ -1139,7 +687,6 @@ function handleRenderFunctionError(error: any): void {
   // TODO: refactor this if we ever combine the devtools and debug tools packages
   wrapperError.name = 'ReactDebugToolsRenderError';
   // this stage-4 proposal is not supported by all environments yet.
-  // $FlowFixMe[prop-missing] Flow doesn't have this type yet.
   wrapperError.cause = error;
   throw wrapperError;
 }
@@ -1148,19 +695,18 @@ export function inspectHooks<Props>(
   renderFunction: Props => React$Node,
   props: Props,
   currentDispatcher: ?CurrentDispatcherRef,
+  includeHooksSource?: boolean = false,
 ): HooksTree {
   // DevTools will pass the current renderer's injected dispatcher.
   // Other apps might compile debug hooks as part of their app though.
   if (currentDispatcher == null) {
-    currentDispatcher = ReactSharedInternals;
+    currentDispatcher = ReactSharedInternals.ReactCurrentDispatcher;
   }
 
-  const previousDispatcher = currentDispatcher.H;
-  currentDispatcher.H = DispatcherProxy;
-
+  const previousDispatcher = currentDispatcher.current;
   let readHookLog;
+  currentDispatcher.current = DispatcherProxy;
   let ancestorStackError;
-
   try {
     ancestorStackError = new Error();
     renderFunction(props);
@@ -1169,22 +715,18 @@ export function inspectHooks<Props>(
   } finally {
     readHookLog = hookLog;
     hookLog = [];
-    // $FlowFixMe[incompatible-use] found when upgrading Flow
-    currentDispatcher.H = previousDispatcher;
+    currentDispatcher.current = previousDispatcher;
   }
   const rootStack = ErrorStackParser.parse(ancestorStackError);
-  return buildTree(rootStack, readHookLog);
+  return buildTree(rootStack, readHookLog, includeHooksSource);
 }
 
 function setupContexts(contextMap: Map<ReactContext<any>, any>, fiber: Fiber) {
-  let current: null | Fiber = fiber;
+  let current = fiber;
   while (current) {
     if (current.tag === ContextProvider) {
-      let context: ReactContext<any> = current.type;
-      if ((context: any)._context !== undefined) {
-        // Support inspection of pre-19+ providers.
-        context = (context: any)._context;
-      }
+      const providerType: ReactProviderType<any> = current.type;
+      const context: ReactContext<any> = providerType._context;
       if (!contextMap.has(context)) {
         // Store the current value that we're going to restore later.
         contextMap.set(context, context._currentValue);
@@ -1205,10 +747,11 @@ function inspectHooksOfForwardRef<Props, Ref>(
   props: Props,
   ref: Ref,
   currentDispatcher: CurrentDispatcherRef,
+  includeHooksSource: boolean,
 ): HooksTree {
-  const previousDispatcher = currentDispatcher.H;
+  const previousDispatcher = currentDispatcher.current;
   let readHookLog;
-  currentDispatcher.H = DispatcherProxy;
+  currentDispatcher.current = DispatcherProxy;
   let ancestorStackError;
   try {
     ancestorStackError = new Error();
@@ -1218,13 +761,13 @@ function inspectHooksOfForwardRef<Props, Ref>(
   } finally {
     readHookLog = hookLog;
     hookLog = [];
-    currentDispatcher.H = previousDispatcher;
+    currentDispatcher.current = previousDispatcher;
   }
   const rootStack = ErrorStackParser.parse(ancestorStackError);
-  return buildTree(rootStack, readHookLog);
+  return buildTree(rootStack, readHookLog, includeHooksSource);
 }
 
-function resolveDefaultProps(Component: any, baseProps: any) {
+function resolveDefaultProps(Component, baseProps) {
   if (Component && Component.defaultProps) {
     // Resolve default props. Taken from ReactElement
     const props = assign({}, baseProps);
@@ -1242,11 +785,12 @@ function resolveDefaultProps(Component: any, baseProps: any) {
 export function inspectHooksOfFiber(
   fiber: Fiber,
   currentDispatcher: ?CurrentDispatcherRef,
-): HooksTree {
+  includeHooksSource?: boolean = false,
+) {
   // DevTools will pass the current renderer's injected dispatcher.
   // Other apps might compile debug hooks as part of their app though.
   if (currentDispatcher == null) {
-    currentDispatcher = ReactSharedInternals;
+    currentDispatcher = ReactSharedInternals.ReactCurrentDispatcher;
   }
 
   if (
@@ -1258,69 +802,31 @@ export function inspectHooksOfFiber(
       'Unknown Fiber. Needs to be a function component to inspect hooks.',
     );
   }
-
   // Warm up the cache so that it doesn't consume the currentHook.
   getPrimitiveStackCache();
-
-  // Set up the current hook so that we can step through and read the
-  // current state from them.
-  currentHook = (fiber.memoizedState: Hook);
-  currentFiber = fiber;
-
-  if (hasOwnProperty.call(currentFiber, 'dependencies')) {
-    // $FlowFixMe[incompatible-use]: Flow thinks hasOwnProperty might have nulled `currentFiber`
-    const dependencies = currentFiber.dependencies;
-    currentContextDependency =
-      dependencies !== null ? dependencies.firstContext : null;
-  } else if (hasOwnProperty.call(currentFiber, 'dependencies_old')) {
-    const dependencies: Dependencies = (currentFiber: any).dependencies_old;
-    currentContextDependency =
-      dependencies !== null ? dependencies.firstContext : null;
-  } else if (hasOwnProperty.call(currentFiber, 'dependencies_new')) {
-    const dependencies: Dependencies = (currentFiber: any).dependencies_new;
-    currentContextDependency =
-      dependencies !== null ? dependencies.firstContext : null;
-  } else if (hasOwnProperty.call(currentFiber, 'contextDependencies')) {
-    const contextDependencies = (currentFiber: any).contextDependencies;
-    currentContextDependency =
-      contextDependencies !== null ? contextDependencies.first : null;
-  } else {
-    throw new Error(
-      'Unsupported React version. This is a bug in React Debug Tools.',
-    );
-  }
-
   const type = fiber.type;
   let props = fiber.memoizedProps;
   if (type !== fiber.elementType) {
     props = resolveDefaultProps(type, props);
   }
-
-  // Only used for versions of React without memoized context value in context dependencies.
-  const contextMap = new Map<ReactContext<any>, any>();
+  // Set up the current hook so that we can step through and read the
+  // current state from them.
+  currentHook = (fiber.memoizedState: Hook);
+  const contextMap = new Map();
   try {
-    if (
-      currentContextDependency !== null &&
-      !hasOwnProperty.call(currentContextDependency, 'memoizedValue')
-    ) {
-      setupContexts(contextMap, fiber);
-    }
-
+    setupContexts(contextMap, fiber);
     if (fiber.tag === ForwardRef) {
       return inspectHooksOfForwardRef(
         type.render,
         props,
         fiber.ref,
         currentDispatcher,
+        includeHooksSource,
       );
     }
-
-    return inspectHooks(type, props, currentDispatcher);
+    return inspectHooks(type, props, currentDispatcher, includeHooksSource);
   } finally {
-    currentFiber = null;
     currentHook = null;
-    currentContextDependency = null;
-
     restoreContexts(contextMap);
   }
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -10,35 +10,28 @@
 'use strict';
 
 let React;
-let ReactDOMClient;
-
-let act;
+let ReactDOM;
 
 describe('getEventKey', () => {
   let container;
-  let root;
 
   beforeEach(() => {
     React = require('react');
-    ReactDOMClient = require('react-dom/client');
-
-    act = require('internal-test-utils').act;
+    ReactDOM = require('react-dom');
 
     // The container has to be attached for events to fire.
     container = document.createElement('div');
-    root = ReactDOMClient.createRoot(container);
     document.body.appendChild(container);
   });
 
   afterEach(() => {
     document.body.removeChild(container);
     container = null;
-    root = null;
   });
 
   describe('when key is implemented in a browser', () => {
     describe('when key is not normalized', () => {
-      it('returns a normalized value', async () => {
+      it('returns a normalized value', () => {
         let key = null;
         class Comp extends React.Component {
           render() {
@@ -46,9 +39,7 @@ describe('getEventKey', () => {
           }
         }
 
-        await act(() => {
-          root.render(<Comp />);
-        });
+        ReactDOM.render(<Comp />, container);
 
         const nativeEvent = new KeyboardEvent('keydown', {
           key: 'Del',
@@ -61,7 +52,7 @@ describe('getEventKey', () => {
     });
 
     describe('when key is normalized', () => {
-      it('returns a key', async () => {
+      it('returns a key', () => {
         let key = null;
         class Comp extends React.Component {
           render() {
@@ -69,9 +60,7 @@ describe('getEventKey', () => {
           }
         }
 
-        await act(() => {
-          root.render(<Comp />);
-        });
+        ReactDOM.render(<Comp />, container);
 
         const nativeEvent = new KeyboardEvent('keydown', {
           key: 'f',
@@ -87,7 +76,7 @@ describe('getEventKey', () => {
   describe('when key is not implemented in a browser', () => {
     describe('when event type is keypress', () => {
       describe('when charCode is 13', () => {
-        it('returns "Enter"', async () => {
+        it('returns "Enter"', () => {
           let key = null;
           class Comp extends React.Component {
             render() {
@@ -95,9 +84,7 @@ describe('getEventKey', () => {
             }
           }
 
-          await act(() => {
-            root.render(<Comp />);
-          });
+          ReactDOM.render(<Comp />, container);
 
           const nativeEvent = new KeyboardEvent('keypress', {
             charCode: 13,
@@ -110,7 +97,7 @@ describe('getEventKey', () => {
       });
 
       describe('when charCode is not 13', () => {
-        it('returns a string from a charCode', async () => {
+        it('returns a string from a charCode', () => {
           let key = null;
           class Comp extends React.Component {
             render() {
@@ -118,9 +105,7 @@ describe('getEventKey', () => {
             }
           }
 
-          await act(() => {
-            root.render(<Comp />);
-          });
+          ReactDOM.render(<Comp />, container);
 
           const nativeEvent = new KeyboardEvent('keypress', {
             charCode: 65,
@@ -135,7 +120,7 @@ describe('getEventKey', () => {
 
     describe('when event type is keydown or keyup', () => {
       describe('when keyCode is recognized', () => {
-        it('returns a translated key', async () => {
+        it('returns a translated key', () => {
           let key = null;
           class Comp extends React.Component {
             render() {
@@ -143,9 +128,7 @@ describe('getEventKey', () => {
             }
           }
 
-          await act(() => {
-            root.render(<Comp />);
-          });
+          ReactDOM.render(<Comp />, container);
 
           const nativeEvent = new KeyboardEvent('keydown', {
             keyCode: 45,
@@ -158,7 +141,7 @@ describe('getEventKey', () => {
       });
 
       describe('when keyCode is not recognized', () => {
-        it('returns Unidentified', async () => {
+        it('returns Unidentified', () => {
           let key = null;
           class Comp extends React.Component {
             render() {
@@ -166,9 +149,7 @@ describe('getEventKey', () => {
             }
           }
 
-          await act(() => {
-            root.render(<Comp />);
-          });
+          ReactDOM.render(<Comp />, container);
 
           const nativeEvent = new KeyboardEvent('keydown', {
             keyCode: 1337,

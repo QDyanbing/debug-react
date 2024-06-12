@@ -1,25 +1,25 @@
 // Example
 
-export const Throw = React.lazy(() => {
+const Throw = React.lazy(() => {
   throw new Error('Example');
 });
 
-export const Component = React.memo(function Component({children}) {
+const Component = React.memo(function Component({children}) {
   return children;
 });
 
-export function DisplayName({children}) {
+function DisplayName({children}) {
   return children;
 }
 DisplayName.displayName = 'Custom Name';
 
-export class NativeClass extends React.Component {
+class NativeClass extends React.Component {
   render() {
     return this.props.children;
   }
 }
 
-export class FrozenClass extends React.Component {
+class FrozenClass extends React.Component {
   constructor() {
     super();
   }

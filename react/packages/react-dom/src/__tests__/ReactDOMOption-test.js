@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -11,56 +11,48 @@
 
 describe('ReactDOMOption', () => {
   let React;
-  let ReactDOMClient;
+  let ReactDOM;
   let ReactDOMServer;
-  let act;
+  let ReactTestUtils;
 
   beforeEach(() => {
     jest.resetModules();
     React = require('react');
-    ReactDOMClient = require('react-dom/client');
+    ReactDOM = require('react-dom');
     ReactDOMServer = require('react-dom/server');
-    act = require('internal-test-utils').act;
+    ReactTestUtils = require('react-dom/test-utils');
   });
 
-  async function renderIntoDocument(children) {
-    const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    await act(async () => root.render(children));
-    return container;
-  }
-
-  it('should flatten children to a string', async () => {
+  it('should flatten children to a string', () => {
     const stub = (
       <option>
         {1} {'foo'}
       </option>
     );
-    const container = await renderIntoDocument(stub);
+    const node = ReactTestUtils.renderIntoDocument(stub);
 
-    expect(container.firstChild.innerHTML).toBe('1 foo');
+    expect(node.innerHTML).toBe('1 foo');
   });
 
-  it('should warn for invalid child tags', async () => {
+  it('should warn for invalid child tags', () => {
     const el = (
       <option value="12">
         {1} <div /> {2}
       </option>
     );
-    let container;
-    await expect(async () => {
-      container = await renderIntoDocument(el);
+    let node;
+    expect(() => {
+      node = ReactTestUtils.renderIntoDocument(el);
     }).toErrorDev(
-      'In HTML, <div> cannot be a child of <option>.\n' +
-        'This will cause a hydration error.\n' +
+      'validateDOMNesting(...): <div> cannot appear as a child of <option>.\n' +
         '    in div (at **)\n' +
         '    in option (at **)',
     );
-    expect(container.firstChild.innerHTML).toBe('1 <div></div> 2');
-    await renderIntoDocument(el);
+    expect(node.innerHTML).toBe('1 <div></div> 2');
+    ReactTestUtils.renderIntoDocument(el);
   });
 
-  it('should warn for component child if no value prop is provided', async () => {
+  it('should warn for component child if no value prop is provided', () => {
     function Foo() {
       return '2';
     }
@@ -69,18 +61,18 @@ describe('ReactDOMOption', () => {
         {1} <Foo /> {3}
       </option>
     );
-    let container;
-    await expect(async () => {
-      container = await renderIntoDocument(el);
+    let node;
+    expect(() => {
+      node = ReactTestUtils.renderIntoDocument(el);
     }).toErrorDev(
       'Cannot infer the option value of complex children. ' +
         'Pass a `value` prop or use a plain string as children to <option>.',
     );
-    expect(container.firstChild.innerHTML).toBe('1 2 3');
-    await renderIntoDocument(el);
+    expect(node.innerHTML).toBe('1 2 3');
+    ReactTestUtils.renderIntoDocument(el);
   });
 
-  it('should not warn for component child if value prop is provided', async () => {
+  it('should not warn for component child if value prop is provided', () => {
     function Foo() {
       return '2';
     }
@@ -89,12 +81,12 @@ describe('ReactDOMOption', () => {
         {1} <Foo /> {3}
       </option>
     );
-    const container = await renderIntoDocument(el);
-    expect(container.firstChild.innerHTML).toBe('1 2 3');
-    await renderIntoDocument(el);
+    const node = ReactTestUtils.renderIntoDocument(el);
+    expect(node.innerHTML).toBe('1 2 3');
+    ReactTestUtils.renderIntoDocument(el);
   });
 
-  it('should ignore null/undefined/false children without warning', async () => {
+  it('should ignore null/undefined/false children without warning', () => {
     const stub = (
       <option>
         {1} {false}
@@ -103,39 +95,38 @@ describe('ReactDOMOption', () => {
         {undefined} {2}
       </option>
     );
-    const container = await renderIntoDocument(stub);
+    const node = ReactTestUtils.renderIntoDocument(stub);
 
-    expect(container.firstChild.innerHTML).toBe('1  2');
+    expect(node.innerHTML).toBe('1  2');
   });
 
-  it('should throw on object children', async () => {
-    await expect(async () =>
-      renderIntoDocument(<option>{{}}</option>),
-    ).rejects.toThrow('Objects are not valid as a React child');
-    await expect(async () => {
-      await renderIntoDocument(<option>{[{}]}</option>);
-    }).rejects.toThrow('Objects are not valid as a React child');
-    await expect(async () => {
-      await renderIntoDocument(
+  it('should throw on object children', () => {
+    expect(() => {
+      ReactTestUtils.renderIntoDocument(<option>{{}}</option>);
+    }).toThrow('Objects are not valid as a React child');
+    expect(() => {
+      ReactTestUtils.renderIntoDocument(<option>{[{}]}</option>);
+    }).toThrow('Objects are not valid as a React child');
+    expect(() => {
+      ReactTestUtils.renderIntoDocument(
         <option>
           {{}}
           <span />
         </option>,
       );
-    }).rejects.toThrow('Objects are not valid as a React child');
-    await expect(async () => {
-      await renderIntoDocument(
+    }).toThrow('Objects are not valid as a React child');
+    expect(() => {
+      ReactTestUtils.renderIntoDocument(
         <option>
           {'1'}
           {{}}
           {2}
         </option>,
       );
-    }).rejects.toThrow('Objects are not valid as a React child');
+    }).toThrow('Objects are not valid as a React child');
   });
 
-  // @gate www
-  it('should support element-ish child', async () => {
+  it('should support element-ish child', () => {
     // This is similar to <fbt>.
     // We don't toString it because you must instead provide a value prop.
     const obj = {
@@ -151,68 +142,59 @@ describe('ReactDOMOption', () => {
       },
     };
 
-    let container = await renderIntoDocument(<option value="a">{obj}</option>);
-    expect(container.firstChild.innerHTML).toBe('hello');
+    let node = ReactTestUtils.renderIntoDocument(
+      <option value="a">{obj}</option>,
+    );
+    expect(node.innerHTML).toBe('hello');
 
-    container = await renderIntoDocument(<option value="b">{[obj]}</option>);
-    expect(container.firstChild.innerHTML).toBe('hello');
+    node = ReactTestUtils.renderIntoDocument(
+      <option value="b">{[obj]}</option>,
+    );
+    expect(node.innerHTML).toBe('hello');
 
-    container = await renderIntoDocument(<option value={obj}>{obj}</option>);
-    expect(container.firstChild.innerHTML).toBe('hello');
-    expect(container.firstChild.value).toBe('hello');
+    node = ReactTestUtils.renderIntoDocument(
+      <option value={obj}>{obj}</option>,
+    );
+    expect(node.innerHTML).toBe('hello');
+    expect(node.value).toBe('hello');
 
-    container = await renderIntoDocument(
+    node = ReactTestUtils.renderIntoDocument(
       <option value={obj}>
         {'1'}
         {obj}
         {2}
       </option>,
     );
-    expect(container.firstChild.innerHTML).toBe('1hello2');
-    expect(container.firstChild.value).toBe('hello');
+    expect(node.innerHTML).toBe('1hello2');
+    expect(node.value).toBe('hello');
   });
 
-  it('should support bigint values', async () => {
-    const container = await renderIntoDocument(<option>{5n}</option>);
-    expect(container.firstChild.innerHTML).toBe('5');
-    expect(container.firstChild.value).toBe('5');
-  });
-
-  it('should be able to use dangerouslySetInnerHTML on option', async () => {
+  it('should be able to use dangerouslySetInnerHTML on option', () => {
     const stub = <option dangerouslySetInnerHTML={{__html: 'foobar'}} />;
-    let container;
-    await expect(async () => {
-      container = await renderIntoDocument(stub);
+    let node;
+    expect(() => {
+      node = ReactTestUtils.renderIntoDocument(stub);
     }).toErrorDev(
       'Pass a `value` prop if you set dangerouslyInnerHTML so React knows which value should be selected.\n' +
         '    in option (at **)',
     );
 
-    expect(container.firstChild.innerHTML).toBe('foobar');
+    expect(node.innerHTML).toBe('foobar');
   });
 
-  it('should set attribute for empty value', async () => {
+  it('should set attribute for empty value', () => {
     const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    let option;
-    await act(() => {
-      root.render(<option value="" />);
-    });
-    option = container.firstChild;
+    const option = ReactDOM.render(<option value="" />, container);
     expect(option.hasAttribute('value')).toBe(true);
     expect(option.getAttribute('value')).toBe('');
 
-    await act(() => {
-      root.render(<option value="lava" />);
-    });
-    option = container.firstChild;
+    ReactDOM.render(<option value="lava" />, container);
     expect(option.hasAttribute('value')).toBe(true);
     expect(option.getAttribute('value')).toBe('lava');
   });
 
-  it('should allow ignoring `value` on option', async () => {
+  it('should allow ignoring `value` on option', () => {
     const a = 'a';
-    let node;
     const stub = (
       <select value="giraffe" onChange={() => {}}>
         <option>monkey</option>
@@ -222,22 +204,15 @@ describe('ReactDOMOption', () => {
     );
     const options = stub.props.children;
     const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    await act(() => {
-      root.render(stub);
-    });
-    node = container.firstChild;
+    const node = ReactDOM.render(stub, container);
 
     expect(node.selectedIndex).toBe(1);
 
-    await act(() => {
-      root.render(<select value="gorilla">{options}</select>);
-    });
-    node = container.firstChild;
+    ReactDOM.render(<select value="gorilla">{options}</select>, container);
     expect(node.selectedIndex).toEqual(2);
   });
 
-  it('generates a hydration error when an invalid nested tag is used as a child', async () => {
+  it('generates a warning and hydration error when an invalid nested tag is used as a child', () => {
     const ref = React.createRef();
     const children = (
       <select readOnly={true} value="bar">
@@ -254,20 +229,16 @@ describe('ReactDOMOption', () => {
     expect(container.firstChild.getAttribute('value')).toBe(null);
     expect(container.firstChild.getAttribute('defaultValue')).toBe(null);
 
-    let option = container.firstChild.firstChild;
+    const option = container.firstChild.firstChild;
     expect(option.nodeName).toBe('OPTION');
 
     expect(option.textContent).toBe('BarFooBaz');
     expect(option.selected).toBe(true);
 
-    await expect(async () => {
-      await act(async () => {
-        ReactDOMClient.hydrateRoot(container, children, {
-          onRecoverableError: () => {},
-        });
-      });
-    }).toErrorDev(['In HTML, <div> cannot be a child of <option>']);
-    option = container.firstChild.firstChild;
+    expect(() => ReactDOM.hydrate(children, container)).toErrorDev([
+      'Text content did not match. Server: "FooBaz" Client: "Foo"',
+      'validateDOMNesting(...): <div> cannot appear as a child of <option>.',
+    ]);
 
     expect(option.textContent).toBe('BarFooBaz');
     expect(option.selected).toBe(true);

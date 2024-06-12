@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -10,18 +10,16 @@
 'use strict';
 
 let React;
-let ReactDOMClient;
+let ReactDOM;
 let ReactDOMSelection;
-let act;
 
 let getModernOffsetsFromPoints;
 
 describe('ReactDOMSelection', () => {
   beforeEach(() => {
     React = require('react');
-    ReactDOMClient = require('react-dom/client');
-    ReactDOMSelection = require('react-dom-bindings/src/client/ReactDOMSelection');
-    act = require('internal-test-utils').act;
+    ReactDOM = require('react-dom');
+    ReactDOMSelection = require('../client/ReactDOMSelection');
 
     ({getModernOffsetsFromPoints} = ReactDOMSelection);
   });
@@ -76,57 +74,53 @@ describe('ReactDOMSelection', () => {
 
   // Complicated example derived from a real-world DOM tree. Has a bit of
   // everything.
-  async function getFixture() {
-    const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    await act(() => {
-      root.render(
+  function getFixture() {
+    return ReactDOM.render(
+      <div>
+        <div>
+          <div>
+            <div>xxxxxxxxxxxxxxxxxxxx</div>
+          </div>
+          x
+          <div>
+            <div>
+              x
+              <div>
+                <div>
+                  <div>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</div>
+                  <div />
+                  <div />
+                  <div>xxxxxxxxxxxxxxxxxx</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div />
+        </div>
         <div>
           <div>
             <div>
-              <div>xxxxxxxxxxxxxxxxxxxx</div>
+              <div>xxxx</div>
+              <div>xxxxxxxxxxxxxxxxxxx</div>
             </div>
-            x
-            <div>
-              <div>
-                x
-                <div>
-                  <div>
-                    <div>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</div>
-                    <div />
-                    <div />
-                    <div>xxxxxxxxxxxxxxxxxx</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div />
           </div>
+          <div>xxx</div>
+          <div>xxxxx</div>
+          <div>xxx</div>
           <div>
             <div>
               <div>
-                <div>xxxx</div>
-                <div>xxxxxxxxxxxxxxxxxxx</div>
-              </div>
-            </div>
-            <div>xxx</div>
-            <div>xxxxx</div>
-            <div>xxx</div>
-            <div>
-              <div>
-                <div>
-                  <div>{['x', 'x', 'xxx']}</div>
-                </div>
+                <div>{['x', 'x', 'xxx']}</div>
               </div>
             </div>
           </div>
-          <div>
-            <div>xxxxxx</div>
-          </div>
-        </div>,
-      );
-    });
-    return container.firstChild;
+        </div>
+        <div>
+          <div>xxxxxx</div>
+        </div>
+      </div>,
+      document.createElement('div'),
+    );
   }
 
   it('returns correctly for base case', () => {
@@ -141,8 +135,8 @@ describe('ReactDOMSelection', () => {
     });
   });
 
-  it('returns correctly for fuzz test', async () => {
-    const fixtureRoot = await getFixture();
+  it('returns correctly for fuzz test', () => {
+    const fixtureRoot = getFixture();
     const allNodes = [fixtureRoot].concat(
       Array.from(fixtureRoot.querySelectorAll('*')),
     );

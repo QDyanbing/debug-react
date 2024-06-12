@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -15,88 +15,119 @@ let act;
 let ReactFiberReconciler;
 let ConcurrentRoot;
 let DefaultEventPriority;
-let NoEventPriority;
 
 describe('ReactFiberHostContext', () => {
   beforeEach(() => {
     jest.resetModules();
     React = require('react');
-    act = React.act;
+    act = React.unstable_act;
     ReactFiberReconciler = require('react-reconciler');
-    ConcurrentRoot =
-      require('react-reconciler/src/ReactRootTags').ConcurrentRoot;
-    DefaultEventPriority =
-      require('react-reconciler/src/ReactEventPriorities').DefaultEventPriority;
-    NoEventPriority =
-      require('react-reconciler/src/ReactEventPriorities').NoEventPriority;
+    ConcurrentRoot = require('react-reconciler/src/ReactRootTags')
+      .ConcurrentRoot;
+    DefaultEventPriority = require('react-reconciler/src/ReactEventPriorities')
+      .DefaultEventPriority;
   });
 
   global.IS_REACT_ACT_ENVIRONMENT = true;
 
   // @gate __DEV__
-  it('should send the context to prepareForCommit and resetAfterCommit', () => {
-    const rootContext = {};
-    const childContext = {};
-    let updatePriority: typeof DefaultEventPriority = NoEventPriority;
+  it('works with null host context', async () => {
+    let creates = 0;
     const Renderer = ReactFiberReconciler({
-      prepareForCommit: function (hostContext) {
-        expect(hostContext).toBe(rootContext);
+      prepareForCommit: function() {
         return null;
       },
-      resetAfterCommit: function (hostContext) {
-        expect(hostContext).toBe(rootContext);
+      resetAfterCommit: function() {},
+      getRootHostContext: function() {
+        return null;
       },
-      getRootHostContext: function () {
-        return rootContext;
+      getChildHostContext: function() {
+        return null;
       },
-      getChildHostContext: function () {
-        return childContext;
-      },
-      shouldSetTextContent: function () {
+      shouldSetTextContent: function() {
         return false;
       },
-      createInstance: function () {
+      createInstance: function() {
+        creates++;
+      },
+      finalizeInitialChildren: function() {
         return null;
       },
-      finalizeInitialChildren: function () {
+      appendInitialChild: function() {
         return null;
       },
-      appendInitialChild: function () {
-        return null;
-      },
-      now: function () {
+      now: function() {
         return 0;
       },
-      appendChildToContainer: function () {
+      appendChildToContainer: function() {
         return null;
       },
-      clearContainer: function () {},
-      setCurrentUpdatePriority: function (newPriority: any) {
-        updatePriority = newPriority;
-      },
-      getCurrentUpdatePriority: function () {
-        return updatePriority;
-      },
-      resolveUpdatePriority: function () {
-        if (updatePriority !== NoEventPriority) {
-          return updatePriority;
-        }
+      clearContainer: function() {},
+      getCurrentEventPriority: function() {
         return DefaultEventPriority;
       },
-      shouldAttemptEagerTransition() {
-        return false;
-      },
-      requestPostPaintCallback: function () {},
-      maySuspendCommit(type, props) {
-        return false;
-      },
-      preloadInstance(type, props) {
-        return true;
-      },
-      startSuspendingCommit() {},
-      suspendInstance(type, props) {},
-      waitForCommitToBeReady() {
+      supportsMutation: true,
+    });
+
+    const container = Renderer.createContainer(
+      /* root: */ null,
+      ConcurrentRoot,
+      null,
+      false,
+      '',
+      null,
+    );
+    act(() => {
+      Renderer.updateContainer(
+        <a>
+          <b />
+        </a>,
+        container,
+        /* parentComponent: */ null,
+        /* callback: */ null,
+      );
+    });
+    expect(creates).toBe(2);
+  });
+
+  // @gate __DEV__
+  it('should send the context to prepareForCommit and resetAfterCommit', () => {
+    const rootContext = {};
+    const Renderer = ReactFiberReconciler({
+      prepareForCommit: function(hostContext) {
+        expect(hostContext).toBe(rootContext);
         return null;
+      },
+      resetAfterCommit: function(hostContext) {
+        expect(hostContext).toBe(rootContext);
+      },
+      getRootHostContext: function() {
+        return null;
+      },
+      getChildHostContext: function() {
+        return null;
+      },
+      shouldSetTextContent: function() {
+        return false;
+      },
+      createInstance: function() {
+        return null;
+      },
+      finalizeInitialChildren: function() {
+        return null;
+      },
+      appendInitialChild: function() {
+        return null;
+      },
+      now: function() {
+        return 0;
+      },
+      appendChildToContainer: function() {
+        return null;
+      },
+      clearContainer: function() {},
+      getCurrentEventPriority: function() {
+        return DefaultEventPriority;
       },
       supportsMutation: true,
     });
@@ -106,11 +137,7 @@ describe('ReactFiberHostContext', () => {
       ConcurrentRoot,
       null,
       false,
-      null,
       '',
-      () => {},
-      () => {},
-      () => {},
       null,
     );
     act(() => {

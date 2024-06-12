@@ -1,17 +1,6 @@
-/**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
- *
- * This source code is licensed under the MIT license found in the
- * LICENSE file in the root directory of this source tree.
- *
- * @flow
- */
-
 'use strict';
 
-/* eslint-disable no-unused-vars */
-
-type JestMockFn<TArguments: $ReadOnlyArray<any>, TReturn> = {
+type JestMockFn<TArguments: $ReadOnlyArray<*>, TReturn> = {
   (...args: TArguments): TReturn,
   /**
    * An object for introspecting mock calls
@@ -217,7 +206,7 @@ type EnzymeMatchersType = {
   toIncludeText(text: string): void,
   toMatchElement(
     element: React$Element<any>,
-    options?: {ignoreProps?: boolean, verbose?: boolean}
+    options?: {|ignoreProps?: boolean, verbose?: boolean|}
   ): void,
   toMatchSelector(selector: string): void,
   // 7.x
@@ -626,7 +615,7 @@ interface JestExpectType {
    * Use .toBeInstanceOf(Class) to check that an object is an instance of a
    * class.
    */
-  toBeInstanceOf(cls: Class<any>): void;
+  toBeInstanceOf(cls: Class<*>): void;
   /**
    * .toBeNull() is the same as .toBe(null) but the error messages are a bit
    * nicer.
@@ -704,11 +693,13 @@ interface JestExpectType {
    * specific arguments.
    */
   toHaveBeenCalledWith(...args: Array<any>): void;
+  toBeCalledWith(...args: Array<any>): void;
   /**
    * Use .toHaveBeenLastCalledWith to ensure that a mock function was last called
    * with specific arguments.
    */
   toHaveBeenLastCalledWith(...args: Array<any>): void;
+  lastCalledWith(...args: Array<any>): void;
   /**
    * Check that an object has a .length property and it is set to a certain
    * numeric value.
@@ -815,7 +806,7 @@ type JestObjectType = {
    * Returns a new, unused mock function. Optionally takes a mock
    * implementation.
    */
-  fn<TArguments: $ReadOnlyArray<any>, TReturn>(
+  fn<TArguments: $ReadOnlyArray<*>, TReturn>(
     implementation?: (...args: TArguments) => TReturn
   ): JestMockFn<TArguments, TReturn>,
   /**
@@ -960,7 +951,7 @@ declare function beforeAll(
 ): void;
 
 /** A context for grouping tests together */
-declare const describe: {
+declare var describe: {
   /**
    * Creates a block that groups together several related tests in one "test suite"
    */
@@ -991,7 +982,7 @@ declare const describe: {
 };
 
 /** An individual test unit */
-declare const it: {
+declare var it: {
   /**
    * An individual test unit
    *
@@ -1079,15 +1070,15 @@ declare function fit(
   timeout?: number
 ): void;
 /** An individual test unit */
-declare const test: typeof it;
+declare var test: typeof it;
 /** A disabled group of tests */
-declare const xdescribe: typeof describe;
+declare var xdescribe: typeof describe;
 /** A focused group of tests */
-declare const fdescribe: typeof describe;
+declare var fdescribe: typeof describe;
 /** A disabled individual test */
-declare const xit: typeof it;
+declare var xit: typeof it;
 /** A disabled individual test */
-declare const xtest: typeof it;
+declare var xtest: typeof it;
 
 type JestPrettyFormatColors = {
   comment: {close: string, open: string},
@@ -1104,7 +1095,7 @@ type JestPrettyFormatPrint = any => string;
 // eslint-disable-next-line no-unused-vars
 type JestPrettyFormatStringOrNull = string | null;
 
-type JestPrettyFormatOptions = {
+type JestPrettyFormatOptions = {|
   callToJSON: boolean,
   edgeSpacing: string,
   escapeRegex: boolean,
@@ -1116,14 +1107,14 @@ type JestPrettyFormatOptions = {
   plugins: JestPrettyFormatPlugins,
   printFunctionName: boolean,
   spacing: string,
-  theme: {
+  theme: {|
     comment: string,
     content: string,
     prop: string,
     tag: string,
     value: string,
-  },
-};
+  |},
+|};
 
 type JestPrettyFormatPlugin = {
   print: (
@@ -1139,7 +1130,7 @@ type JestPrettyFormatPlugin = {
 type JestPrettyFormatPlugins = Array<JestPrettyFormatPlugin>;
 
 /** The expect function is used every time you want to test a value */
-declare const expect: {
+declare var expect: {
   /** The object that you want to make assertions against */
   (
     value: any
@@ -1172,5 +1163,28 @@ declare const expect: {
   },
 };
 
+// TODO handle return type
+// https://jasmine.github.io/2.4/introduction.html#section-Spies
+declare function spyOn(value: mixed, method: string): Object;
+
 /** Holds all functions related to manipulating test runner */
-declare const jest: JestObjectType;
+declare var jest: JestObjectType;
+
+/**
+ * The global Jasmine object, this is generally not exposed as the public API,
+ * using features inside here could break in later versions of Jest.
+ */
+declare var jasmine: {
+  DEFAULT_TIMEOUT_INTERVAL: number,
+  any(value: mixed): JestAsymmetricEqualityType,
+  anything(): any,
+  arrayContaining(value: Array<mixed>): Array<mixed>,
+  clock(): JestClockType,
+  createSpy(name: string): JestSpyType,
+  createSpyObj(
+    baseName: string,
+    methodNames: Array<string>
+  ): {[methodName: string]: JestSpyType},
+  objectContaining(value: Object): Object,
+  stringMatching(value: string): string,
+};

@@ -1,11 +1,10 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
  * @emails react-core
- * @jest-environment ./scripts/jest/ReactDOMServerIntegrationEnvironment
  */
 
 'use strict';
@@ -14,21 +13,24 @@ const ReactDOMServerIntegrationUtils = require('./utils/ReactDOMServerIntegratio
 
 let PropTypes;
 let React;
-let ReactDOMClient;
+let ReactDOM;
 let ReactDOMServer;
+let ReactTestUtils;
 
 function initModules() {
   // Reset warning cache.
-  jest.resetModules();
+  jest.resetModuleRegistry();
   PropTypes = require('prop-types');
   React = require('react');
-  ReactDOMClient = require('react-dom/client');
+  ReactDOM = require('react-dom');
   ReactDOMServer = require('react-dom/server');
+  ReactTestUtils = require('react-dom/test-utils');
 
   // Make them available to the helpers.
   return {
-    ReactDOMClient,
+    ReactDOM,
     ReactDOMServer,
+    ReactTestUtils,
   };
 }
 
@@ -36,7 +38,6 @@ const {
   resetModules,
   itRenders,
   itThrowsWhenRendering,
-  clientRenderOnBadMarkup,
 } = ReactDOMServerIntegrationUtils(initModules);
 
 describe('ReactDOMServerIntegration', () => {
@@ -44,14 +45,7 @@ describe('ReactDOMServerIntegration', () => {
     resetModules();
   });
 
-  describe('legacy context', function () {
-    // The `itRenders` test abstraction doesn't work with @gate so we have
-    // to do this instead.
-    if (gate(flags => flags.disableLegacyContext)) {
-      it('empty test to stop Jest from being a complainy complainer', () => {});
-      return;
-    }
-
+  describe('legacy context', function() {
     let PurpleContext, RedContext;
     beforeEach(() => {
       class Parent extends React.Component {
@@ -276,10 +270,7 @@ describe('ReactDOMServerIntegration', () => {
             return {foo: 'bar'};
           }
         }
-        const e = await render(
-          <ForgetfulParent />,
-          render === clientRenderOnBadMarkup ? 2 : 1,
-        );
+        const e = await render(<ForgetfulParent />, 1);
         expect(e.textContent).toBe('nope');
       },
     );
@@ -314,7 +305,7 @@ describe('ReactDOMServerIntegration', () => {
       expect(() => {
         ReactDOMServer.renderToString(<MyComponent />);
       }).toErrorDev(
-        'MyComponent.getChildContext(): childContextTypes must be defined in order to use getChildContext().\n' +
+        'Warning: MyComponent.getChildContext(): childContextTypes must be defined in order to use getChildContext().\n' +
           '    in MyComponent (at **)',
       );
     });

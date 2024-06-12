@@ -1,30 +1,20 @@
 'use strict';
 
-const {
-  esNextPaths,
-  typescriptPaths,
-} = require('./scripts/shared/pathsByLanguageVersion');
+const {esNextPaths} = require('./scripts/shared/pathsByLanguageVersion');
 
 module.exports = {
   bracketSpacing: false,
   singleQuote: true,
-  bracketSameLine: true,
+  jsxBracketSameLine: true,
   trailingComma: 'es5',
   printWidth: 80,
-  parser: 'flow',
-  arrowParens: 'avoid',
+  parser: 'babel',
+
   overrides: [
     {
       files: esNextPaths,
       options: {
         trailingComma: 'all',
-      },
-    },
-    {
-      files: typescriptPaths,
-      options: {
-        trailingComma: 'all',
-        parser: 'typescript',
       },
     },
   ],

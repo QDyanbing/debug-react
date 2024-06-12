@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -10,23 +10,21 @@
 'use strict';
 
 let React;
-let ReactDOMClient;
-let act;
+let ReactDOM;
 
 describe('ReactCompositeComponentNestedState-state', () => {
   beforeEach(() => {
     React = require('react');
-    ReactDOMClient = require('react-dom/client');
-    act = require('internal-test-utils').act;
+    ReactDOM = require('react-dom');
   });
 
-  it('should provide up to date values for props', async () => {
+  it('should provide up to date values for props', () => {
     class ParentComponent extends React.Component {
       state = {color: 'blue'};
 
       handleColor = color => {
         this.props.logger('parent-handleColor', this.state.color);
-        this.setState({color: color}, function () {
+        this.setState({color: color}, function() {
           this.props.logger('parent-after-setState', this.state.color);
         });
       };
@@ -54,7 +52,7 @@ describe('ReactCompositeComponentNestedState-state', () => {
         this.props.logger('handleHue', this.state.hue, this.props.color);
         this.props.onSelectColor(color);
         this.setState(
-          function (state, props) {
+          function(state, props) {
             this.props.logger(
               'setState-this',
               this.state.hue,
@@ -63,7 +61,7 @@ describe('ReactCompositeComponentNestedState-state', () => {
             this.props.logger('setState-args', state.hue, props.color);
             return {hue: shade + ' ' + props.color};
           },
-          function () {
+          function() {
             this.props.logger(
               'after-setState',
               this.state.hue,
@@ -98,16 +96,11 @@ describe('ReactCompositeComponentNestedState-state', () => {
     document.body.appendChild(container);
 
     const logger = jest.fn();
-    const root = ReactDOMClient.createRoot(container);
 
-    await act(async () => {
-      root.render(<ParentComponent logger={logger} />);
-    });
+    void ReactDOM.render(<ParentComponent logger={logger} />, container);
 
-    await act(async () => {
-      // click "light green"
-      container.childNodes[0].childNodes[3].click();
-    });
+    // click "light green"
+    container.childNodes[0].childNodes[3].click();
 
     expect(logger.mock.calls).toEqual([
       ['parent-render', 'blue'],

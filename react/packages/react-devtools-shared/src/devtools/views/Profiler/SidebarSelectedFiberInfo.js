@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -9,18 +9,18 @@
 
 import * as React from 'react';
 import {Fragment, useContext, useEffect, useRef} from 'react';
-
 import WhatChanged from './WhatChanged';
 import {ProfilerContext} from './ProfilerContext';
 import {formatDuration, formatTime} from './utils';
 import {StoreContext} from '../context';
 import Button from '../Button';
 import ButtonIcon from '../ButtonIcon';
-import InspectedElementBadges from '../Components/InspectedElementBadges';
 
 import styles from './SidebarSelectedFiberInfo.css';
 
-export default function SidebarSelectedFiberInfo(): React.Node {
+export type Props = {||};
+
+export default function SidebarSelectedFiberInfo(_: Props) {
   const {profilerStore} = useContext(StoreContext);
   const {
     rootID,
@@ -33,37 +33,11 @@ export default function SidebarSelectedFiberInfo(): React.Node {
   const {profilingCache} = profilerStore;
   const selectedListItemRef = useRef<HTMLElement | null>(null);
 
-  useEffect(() => {
-    const selectedElement = selectedListItemRef.current;
-    if (
-      selectedElement !== null &&
-      // $FlowFixMe[method-unbinding]
-      typeof selectedElement.scrollIntoView === 'function'
-    ) {
-      selectedElement.scrollIntoView({block: 'nearest', inline: 'nearest'});
-    }
-  }, [selectedCommitIndex]);
-
-  if (
-    selectedFiberID === null ||
-    rootID === null ||
-    selectedCommitIndex === null
-  ) {
-    return null;
-  }
-
   const commitIndices = profilingCache.getFiberCommits({
-    fiberID: selectedFiberID,
-    rootID: rootID,
+    fiberID: ((selectedFiberID: any): number),
+    rootID: ((rootID: any): number),
   });
 
-  const {nodes} = profilingCache.getCommitTree({
-    rootID,
-    commitIndex: selectedCommitIndex,
-  });
-  const node = nodes.get(selectedFiberID);
-
-  // $FlowFixMe[missing-local-annot]
   const handleKeyDown = event => {
     switch (event.key) {
       case 'ArrowUp':
@@ -88,6 +62,16 @@ export default function SidebarSelectedFiberInfo(): React.Node {
         break;
     }
   };
+
+  useEffect(() => {
+    const selectedElement = selectedListItemRef.current;
+    if (
+      selectedElement !== null &&
+      typeof selectedElement.scrollIntoView === 'function'
+    ) {
+      selectedElement.scrollIntoView({block: 'nearest', inline: 'nearest'});
+    }
+  }, [selectedCommitIndex]);
 
   const listItems = [];
   let i = 0;
@@ -122,24 +106,18 @@ export default function SidebarSelectedFiberInfo(): React.Node {
         </div>
 
         <Button
+          className={styles.IconButton}
           onClick={() => selectFiber(null, null)}
           title="Back to commit view">
           <ButtonIcon type="close" />
         </Button>
       </div>
       <div className={styles.Content} onKeyDown={handleKeyDown} tabIndex={0}>
-        {node != null && (
-          <InspectedElementBadges
-            hocDisplayNames={node.hocDisplayNames}
-            compiledWithForget={node.compiledWithForget}
-          />
-        )}
         <WhatChanged fiberID={((selectedFiberID: any): number)} />
         {listItems.length > 0 && (
-          <div>
-            <label className={styles.Label}>Rendered at: </label>
-            {listItems}
-          </div>
+          <Fragment>
+            <label className={styles.Label}>Rendered at</label>: {listItems}
+          </Fragment>
         )}
         {listItems.length === 0 && (
           <div>Did not render during this profiling session.</div>

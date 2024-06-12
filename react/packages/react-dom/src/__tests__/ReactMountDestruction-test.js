@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -11,45 +11,33 @@
 
 const React = require('react');
 const ReactDOM = require('react-dom');
-const ReactDOMClient = require('react-dom/client');
-const act = require('internal-test-utils').act;
 
 describe('ReactMount', () => {
-  it('should destroy a react root upon request', async () => {
+  it('should destroy a react root upon request', () => {
     const mainContainerDiv = document.createElement('div');
     document.body.appendChild(mainContainerDiv);
 
     const instanceOne = <div className="firstReactDiv" />;
     const firstRootDiv = document.createElement('div');
     mainContainerDiv.appendChild(firstRootDiv);
-    const firstRoot = ReactDOMClient.createRoot(firstRootDiv);
-    await act(() => {
-      firstRoot.render(instanceOne);
-    });
+    ReactDOM.render(instanceOne, firstRootDiv);
 
     const instanceTwo = <div className="secondReactDiv" />;
     const secondRootDiv = document.createElement('div');
     mainContainerDiv.appendChild(secondRootDiv);
-    const secondRoot = ReactDOMClient.createRoot(secondRootDiv);
-    await act(() => {
-      secondRoot.render(instanceTwo);
-    });
+    ReactDOM.render(instanceTwo, secondRootDiv);
 
     // Test that two react roots are rendered in isolation
     expect(firstRootDiv.firstChild.className).toBe('firstReactDiv');
     expect(secondRootDiv.firstChild.className).toBe('secondReactDiv');
 
     // Test that after unmounting each, they are no longer in the document.
-    await act(() => {
-      firstRoot.unmount();
-    });
+    ReactDOM.unmountComponentAtNode(firstRootDiv);
     expect(firstRootDiv.firstChild).toBeNull();
-    await act(() => {
-      secondRoot.unmount();
-    });
+    ReactDOM.unmountComponentAtNode(secondRootDiv);
+    expect(secondRootDiv.firstChild).toBeNull();
   });
 
-  // @gate !disableLegacyMode
   it('should warn when unmounting a non-container root node', () => {
     const mainContainerDiv = document.createElement('div');
 
@@ -58,13 +46,14 @@ describe('ReactMount', () => {
         <div />
       </div>
     );
-    // Cannot be migrated to createRoot until we remove unmountComponentAtNode i.e. remove this test.
     ReactDOM.render(component, mainContainerDiv);
 
     // Test that unmounting at a root node gives a helpful warning
     const rootDiv = mainContainerDiv.firstChild;
-    expect(() => ReactDOM.unmountComponentAtNode(rootDiv)).toErrorDev(
-      "unmountComponentAtNode(): The node you're attempting to " +
+    expect(() =>
+      ReactDOM.unmountComponentAtNode(rootDiv),
+    ).toErrorDev(
+      "Warning: unmountComponentAtNode(): The node you're attempting to " +
         'unmount was rendered by React and is not a top-level container. You ' +
         'may have accidentally passed in a React root node instead of its ' +
         'container.',
@@ -72,7 +61,6 @@ describe('ReactMount', () => {
     );
   });
 
-  // @gate !disableLegacyMode
   it('should warn when unmounting a non-container, non-root node', () => {
     const mainContainerDiv = document.createElement('div');
 
@@ -83,13 +71,14 @@ describe('ReactMount', () => {
         </div>
       </div>
     );
-    // Cannot be migrated to createRoot until we remove unmountComponentAtNode i.e. remove this test.
     ReactDOM.render(component, mainContainerDiv);
 
     // Test that unmounting at a non-root node gives a different warning
     const nonRootDiv = mainContainerDiv.firstChild.firstChild;
-    expect(() => ReactDOM.unmountComponentAtNode(nonRootDiv)).toErrorDev(
-      "unmountComponentAtNode(): The node you're attempting to " +
+    expect(() =>
+      ReactDOM.unmountComponentAtNode(nonRootDiv),
+    ).toErrorDev(
+      "Warning: unmountComponentAtNode(): The node you're attempting to " +
         'unmount was rendered by React and is not a top-level container. ' +
         'Instead, have the parent component update its state and rerender in ' +
         'order to remove this component.',

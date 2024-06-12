@@ -1,13 +1,11 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
  * @flow
  */
-
-import type {Element} from 'react-devtools-shared/src/frontend/types';
 
 import * as React from 'react';
 import {useContext, useMemo} from 'react';
@@ -19,12 +17,12 @@ import {useSubscription} from '../hooks';
 
 import styles from './SelectedTreeHighlight.css';
 
-type Data = {
+type Data = {|
   startIndex: number,
   stopIndex: number,
-};
+|};
 
-export default function SelectedTreeHighlight(_: {}): React.Node {
+export default function SelectedTreeHighlight(_: {||}) {
   const {lineHeight} = useContext(SettingsContext);
   const store = useContext(StoreContext);
   const treeFocused = useContext(TreeFocusedContext);
@@ -55,7 +53,7 @@ export default function SelectedTreeHighlight(_: {}): React.Node {
         }
 
         let stopIndex = null;
-        let current: null | Element = element;
+        let current = element;
         while (current !== null) {
           if (current.isCollapsed || current.children.length === 0) {
             // We've found the last/deepest descendant.

@@ -5,19 +5,3 @@ html, body {
 body {
   margin: 8px;
 }
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-  }
-
-  @supports (-moz-appearance:none) {
-    :root {
-      background: black;
-    }
-
-    body {
-      color: white;
-    }
-  }
-}

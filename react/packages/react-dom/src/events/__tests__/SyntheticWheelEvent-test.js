@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -10,22 +10,18 @@
 'use strict';
 
 let React;
-let ReactDOMClient;
-let act;
+let ReactDOM;
 
 describe('SyntheticWheelEvent', () => {
   let container;
-  let root;
 
   beforeEach(() => {
     React = require('react');
-    ReactDOMClient = require('react-dom/client');
-    act = require('internal-test-utils').act;
+    ReactDOM = require('react-dom');
 
     // The container has to be attached for events to fire.
     container = document.createElement('div');
     document.body.appendChild(container);
-    root = ReactDOMClient.createRoot(container);
   });
 
   afterEach(() => {
@@ -33,15 +29,13 @@ describe('SyntheticWheelEvent', () => {
     container = null;
   });
 
-  it('should normalize properties from the MouseEvent interface', async () => {
+  it('should normalize properties from the MouseEvent interface', () => {
     const events = [];
     const onWheel = event => {
       event.persist();
       events.push(event);
     };
-    await act(async () => {
-      root.render(<div onWheel={onWheel} />);
-    });
+    ReactDOM.render(<div onWheel={onWheel} />, container);
 
     container.firstChild.dispatchEvent(
       new MouseEvent('wheel', {
@@ -54,19 +48,19 @@ describe('SyntheticWheelEvent', () => {
     expect(events[0].button).toBe(1);
   });
 
-  it('should normalize properties from the WheelEvent interface', async () => {
+  it('should normalize properties from the WheelEvent interface', () => {
     const events = [];
     const onWheel = event => {
       event.persist();
       events.push(event);
     };
+    ReactDOM.render(<div onWheel={onWheel} />, container);
 
-    await act(async () => {
-      root.render(<div onWheel={onWheel} />);
-    });
-
-    let event = new WheelEvent('wheel', {
+    let event = new MouseEvent('wheel', {
       bubbles: true,
+    });
+    // jsdom doesn't support these so we add them manually.
+    Object.assign(event, {
       deltaX: 10,
       deltaY: -50,
     });
@@ -75,7 +69,7 @@ describe('SyntheticWheelEvent', () => {
     event = new MouseEvent('wheel', {
       bubbles: true,
     });
-    // jsdom doesn't support these legacy Webkit properties so we add them manually.
+    // jsdom doesn't support these so we add them manually.
     Object.assign(event, {
       wheelDeltaX: -10,
       wheelDeltaY: 50,
@@ -89,7 +83,7 @@ describe('SyntheticWheelEvent', () => {
     expect(events[1].deltaY).toBe(-50);
   });
 
-  it('should be able to `preventDefault` and `stopPropagation`', async () => {
+  it('should be able to `preventDefault` and `stopPropagation`', () => {
     const events = [];
     const onWheel = event => {
       expect(event.isDefaultPrevented()).toBe(false);
@@ -98,12 +92,10 @@ describe('SyntheticWheelEvent', () => {
       event.persist();
       events.push(event);
     };
-    await act(async () => {
-      root.render(<div onWheel={onWheel} />);
-    });
+    ReactDOM.render(<div onWheel={onWheel} />, container);
 
     container.firstChild.dispatchEvent(
-      new WheelEvent('wheel', {
+      new MouseEvent('wheel', {
         bubbles: true,
         deltaX: 10,
         deltaY: -50,
@@ -111,7 +103,7 @@ describe('SyntheticWheelEvent', () => {
     );
 
     container.firstChild.dispatchEvent(
-      new WheelEvent('wheel', {
+      new MouseEvent('wheel', {
         bubbles: true,
         deltaX: 10,
         deltaY: -50,
@@ -119,6 +111,5 @@ describe('SyntheticWheelEvent', () => {
     );
 
     expect(events.length).toBe(2);
-    expect.assertions(5);
   });
 });

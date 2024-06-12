@@ -5,7 +5,7 @@ const {createPatch} = require('diff');
 const {hashElement} = require('folder-hash');
 const {existsSync, readFileSync, writeFileSync} = require('fs');
 const {readJson, writeJson} = require('fs-extra');
-const fetch = require('node-fetch');
+const http = require('request-promise-json');
 const logUpdate = require('log-update');
 const {join} = require('path');
 const createLogger = require('progress-estimator');
@@ -59,14 +59,9 @@ const extractCommitFromVersionNumber = version => {
 };
 
 const getArtifactsList = async buildID => {
-  const headers = {};
-  const {CIRCLE_CI_API_TOKEN} = process.env;
-  if (CIRCLE_CI_API_TOKEN != null) {
-    headers['Circle-Token'] = CIRCLE_CI_API_TOKEN;
-  }
   const jobArtifactsURL = `https://circleci.com/api/v1.1/project/github/facebook/react/${buildID}/artifacts`;
-  const jobArtifacts = await fetch(jobArtifactsURL, {headers});
-  return jobArtifacts.json();
+  const jobArtifacts = await http.get(jobArtifactsURL, true);
+  return jobArtifacts;
 };
 
 const getBuildInfo = async () => {
@@ -118,7 +113,7 @@ const getDateStringForCommit = async commit => {
 
   // On CI environment, this string is wrapped with quotes '...'s
   if (dateString.startsWith("'")) {
-    dateString = dateString.slice(1, 9);
+    dateString = dateString.substr(1, 8);
   }
 
   return dateString;

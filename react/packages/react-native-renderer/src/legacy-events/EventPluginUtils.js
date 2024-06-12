@@ -1,14 +1,12 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
 
+import {invokeGuardedCallbackAndCatchFirstError} from 'shared/ReactErrorUtils';
 import isArray from 'shared/isArray';
-
-let hasError = false;
-let caughtError = null;
 
 export let getFiberCurrentPropsFromNode = null;
 export let getInstanceFromNode = null;
@@ -25,15 +23,16 @@ export function setComponentTree(
   if (__DEV__) {
     if (!getNodeFromInstance || !getInstanceFromNode) {
       console.error(
-        'Injected ' +
+        'EventPluginUtils.setComponentTree(...): Injected ' +
           'module is missing getNodeFromInstance or getInstanceFromNode.',
       );
     }
   }
 }
 
-function validateEventDispatches(event) {
-  if (__DEV__) {
+let validateEventDispatches;
+if (__DEV__) {
+  validateEventDispatches = function(event) {
     const dispatchListeners = event._dispatchListeners;
     const dispatchInstances = event._dispatchInstances;
 
@@ -54,7 +53,7 @@ function validateEventDispatches(event) {
     if (instancesIsArr !== listenersIsArr || instancesLen !== listenersLen) {
       console.error('EventPluginUtils: Invalid `event`.');
     }
-  }
+  };
 }
 
 /**
@@ -64,17 +63,9 @@ function validateEventDispatches(event) {
  * @param {*} inst Internal component instance
  */
 export function executeDispatch(event, listener, inst) {
+  const type = event.type || 'unknown-event';
   event.currentTarget = getNodeFromInstance(inst);
-  try {
-    listener(event);
-  } catch (error) {
-    if (!hasError) {
-      hasError = true;
-      caughtError = error;
-    } else {
-      // TODO: Make sure this error gets logged somehow.
-    }
-  }
+  invokeGuardedCallbackAndCatchFirstError(type, listener, undefined, event);
   event.currentTarget = null;
 }
 
@@ -160,7 +151,7 @@ export function executeDirectDispatch(event) {
   const dispatchInstance = event._dispatchInstances;
 
   if (isArray(dispatchListener)) {
-    throw new Error('Invalid `event`.');
+    throw new Error('executeDirectDispatch(...): Invalid `event`.');
   }
 
   event.currentTarget = dispatchListener
@@ -179,13 +170,4 @@ export function executeDirectDispatch(event) {
  */
 export function hasDispatches(event) {
   return !!event._dispatchListeners;
-}
-
-export function rethrowCaughtError() {
-  if (hasError) {
-    const error = caughtError;
-    hasError = false;
-    caughtError = null;
-    throw error;
-  }
 }

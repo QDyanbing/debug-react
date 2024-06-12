@@ -9,7 +9,6 @@ const semver = require('semver');
 
 const ossConfig = './scripts/jest/config.source.js';
 const wwwConfig = './scripts/jest/config.source-www.js';
-const xplatConfig = './scripts/jest/config.source-xplat.js';
 const devToolsConfig = './scripts/jest/config.build-devtools.js';
 
 // TODO: These configs are separate but should be rolled into the configs above
@@ -46,8 +45,8 @@ const argv = yargs
       describe: 'Run with the given release channel.',
       requiresArg: true,
       type: 'string',
-      default: 'experimental',
-      choices: ['experimental', 'stable', 'www-classic', 'www-modern', 'xplat'],
+      default: 'www-modern',
+      choices: ['experimental', 'stable', 'www-classic', 'www-modern'],
     },
     env: {
       alias: 'e',
@@ -94,6 +93,11 @@ const argv = yargs
       type: 'boolean',
       default: false,
     },
+    deprecated: {
+      describe: 'Print deprecation message for command.',
+      requiresArg: true,
+      type: 'string',
+    },
     compactConsole: {
       alias: 'c',
       describe: 'Compact console output (hide file locations).',
@@ -123,10 +127,6 @@ function isWWWConfig() {
       argv.releaseChannel === 'www-modern') &&
     argv.project !== 'devtools'
   );
-}
-
-function isXplatConfig() {
-  return argv.releaseChannel === 'xplat' && argv.project !== 'devtools';
 }
 
 function isOSSConfig() {
@@ -194,7 +194,7 @@ function validateOptions() {
     }
   }
 
-  if (isWWWConfig() || isXplatConfig()) {
+  if (isWWWConfig()) {
     if (argv.variant === undefined) {
       // Turn internal experiments on by default
       argv.variant = true;
@@ -229,13 +229,6 @@ function validateOptions() {
     success = false;
   }
 
-  if (argv.build && isXplatConfig()) {
-    logError(
-      'Build targets are only not supported for xplat release channels. Update these options to continue.'
-    );
-    success = false;
-  }
-
   if (argv.env && argv.env !== 'production' && argv.prod) {
     logError(
       'Build type does not match --prod. Update these options to continue.'
@@ -262,7 +255,7 @@ function validateOptions() {
     const buildDir = path.resolve('./build');
     if (!fs.existsSync(buildDir)) {
       logError(
-        'Build directory does not exist, please run `yarn build` or remove the --build option.'
+        'Build directory does not exist, please run `yarn build-combined` or remove the --build option.'
       );
       success = false;
     } else if (Date.now() - fs.statSync(buildDir).mtimeMs > 1000 * 60 * 15) {
@@ -289,8 +282,6 @@ function getCommandArgs() {
     args.push(persistentConfig);
   } else if (isWWWConfig()) {
     args.push(wwwConfig);
-  } else if (isXplatConfig()) {
-    args.push(xplatConfig);
   } else if (isOSSConfig()) {
     args.push(ossConfig);
   } else {
@@ -358,6 +349,11 @@ function getEnvars() {
 }
 
 function main() {
+  if (argv.deprecated) {
+    console.log(chalk.red(`\nPlease run: \`${argv.deprecated}\` instead.\n`));
+    return;
+  }
+
   validateOptions();
 
   const args = getCommandArgs();

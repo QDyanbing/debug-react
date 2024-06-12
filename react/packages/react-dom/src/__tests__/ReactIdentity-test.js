@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -10,18 +10,18 @@
 'use strict';
 
 let React;
-let ReactDOMClient;
-let act;
+let ReactDOM;
+let ReactTestUtils;
 
 describe('ReactIdentity', () => {
   beforeEach(() => {
     jest.resetModules();
     React = require('react');
-    ReactDOMClient = require('react-dom/client');
-    act = require('internal-test-utils').act;
+    ReactDOM = require('react-dom');
+    ReactTestUtils = require('react-dom/test-utils');
   });
 
-  it('should allow key property to express identity', async () => {
+  it('should allow key property to express identity', () => {
     let node;
     const Component = props => (
       <div ref={c => (node = c)}>
@@ -31,20 +31,15 @@ describe('ReactIdentity', () => {
     );
 
     const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    await act(async () => {
-      root.render(<Component />);
-    });
+    ReactDOM.render(<Component />, container);
     const origChildren = Array.from(node.childNodes);
-    await act(async () => {
-      root.render(<Component swap={true} />);
-    });
+    ReactDOM.render(<Component swap={true} />, container);
     const newChildren = Array.from(node.childNodes);
     expect(origChildren[0]).toBe(newChildren[1]);
     expect(origChildren[1]).toBe(newChildren[0]);
   });
 
-  it('should use composite identity', async () => {
+  it('should use composite identity', () => {
     class Wrapper extends React.Component {
       render() {
         return <a>{this.props.children}</a>;
@@ -52,72 +47,64 @@ describe('ReactIdentity', () => {
     }
 
     const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
     let node1;
     let node2;
-    await act(async () => {
-      root.render(
-        <Wrapper key="wrap1">
-          <span ref={c => (node1 = c)} />
-        </Wrapper>,
-      );
-    });
-    await act(async () => {
-      root.render(
-        <Wrapper key="wrap2">
-          <span ref={c => (node2 = c)} />
-        </Wrapper>,
-      );
-    });
+    ReactDOM.render(
+      <Wrapper key="wrap1">
+        <span ref={c => (node1 = c)} />
+      </Wrapper>,
+      container,
+    );
+    ReactDOM.render(
+      <Wrapper key="wrap2">
+        <span ref={c => (node2 = c)} />
+      </Wrapper>,
+      container,
+    );
+
     expect(node1).not.toBe(node2);
   });
 
-  async function renderAComponentWithKeyIntoContainer(key, root) {
+  function renderAComponentWithKeyIntoContainer(key, container) {
     class Wrapper extends React.Component {
-      spanRef = React.createRef();
       render() {
         return (
           <div>
-            <span ref={this.spanRef} key={key} />
+            <span ref="span" key={key} />
           </div>
         );
       }
     }
-    const wrapperRef = React.createRef();
-    await act(async () => {
-      root.render(<Wrapper ref={wrapperRef} />);
-    });
-    const span = wrapperRef.current.spanRef.current;
+
+    const instance = ReactDOM.render(<Wrapper />, container);
+    const span = instance.refs.span;
     expect(span).not.toBe(null);
   }
 
-  it('should allow any character as a key, in a detached parent', async () => {
+  it('should allow any character as a key, in a detached parent', () => {
     const detachedContainer = document.createElement('div');
-    const root = ReactDOMClient.createRoot(detachedContainer);
-    await renderAComponentWithKeyIntoContainer("<'WEIRD/&\\key'>", root);
+    renderAComponentWithKeyIntoContainer("<'WEIRD/&\\key'>", detachedContainer);
   });
 
-  it('should allow any character as a key, in an attached parent', async () => {
+  it('should allow any character as a key, in an attached parent', () => {
     // This test exists to protect against implementation details that
     // incorrectly query escaped IDs using DOM tools like getElementById.
     const attachedContainer = document.createElement('div');
-    const root = ReactDOMClient.createRoot(attachedContainer);
     document.body.appendChild(attachedContainer);
 
-    await renderAComponentWithKeyIntoContainer("<'WEIRD/&\\key'>", root);
+    renderAComponentWithKeyIntoContainer("<'WEIRD/&\\key'>", attachedContainer);
 
     document.body.removeChild(attachedContainer);
   });
 
-  it('should not allow scripts in keys to execute', async () => {
+  it('should not allow scripts in keys to execute', () => {
     const h4x0rKey =
       '"><script>window[\'YOUVEBEENH4X0RED\']=true;</script><div id="';
 
     const attachedContainer = document.createElement('div');
-    const root = ReactDOMClient.createRoot(attachedContainer);
     document.body.appendChild(attachedContainer);
 
-    await renderAComponentWithKeyIntoContainer(h4x0rKey, root);
+    renderAComponentWithKeyIntoContainer(h4x0rKey, attachedContainer);
 
     document.body.removeChild(attachedContainer);
 
@@ -125,7 +112,7 @@ describe('ReactIdentity', () => {
     expect(window.YOUVEBEENH4X0RED).toBe(undefined);
   });
 
-  it('should let restructured components retain their uniqueness', async () => {
+  it('should let restructured components retain their uniqueness', () => {
     const instance0 = <span />;
     const instance1 = <span />;
     const instance2 = <span />;
@@ -153,16 +140,12 @@ describe('ReactIdentity', () => {
       }
     }
 
-    const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    await expect(
-      act(() => {
-        root.render(<TestContainer />);
-      }),
-    ).resolves.not.toThrow();
+    expect(function() {
+      ReactTestUtils.renderIntoDocument(<TestContainer />);
+    }).not.toThrow();
   });
 
-  it('should let nested restructures retain their uniqueness', async () => {
+  it('should let nested restructures retain their uniqueness', () => {
     const instance0 = <span />;
     const instance1 = <span />;
     const instance2 = <span />;
@@ -192,16 +175,12 @@ describe('ReactIdentity', () => {
       }
     }
 
-    const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    await expect(
-      act(() => {
-        root.render(<TestContainer />);
-      }),
-    ).resolves.not.toThrow();
+    expect(function() {
+      ReactTestUtils.renderIntoDocument(<TestContainer />);
+    }).not.toThrow();
   });
 
-  it('should let text nodes retain their uniqueness', async () => {
+  it('should let text nodes retain their uniqueness', () => {
     class TestComponent extends React.Component {
       render() {
         return (
@@ -224,16 +203,12 @@ describe('ReactIdentity', () => {
       }
     }
 
-    const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    await expect(
-      act(() => {
-        root.render(<TestContainer />);
-      }),
-    ).resolves.not.toThrow();
+    expect(function() {
+      ReactTestUtils.renderIntoDocument(<TestContainer />);
+    }).not.toThrow();
   });
 
-  it('should retain key during updates in composite components', async () => {
+  it('should retain key during updates in composite components', () => {
     class TestComponent extends React.Component {
       render() {
         return <div>{this.props.children}</div>;
@@ -260,29 +235,22 @@ describe('ReactIdentity', () => {
     const instance0 = <span key="A" />;
     const instance1 = <span key="B" />;
 
-    const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    const wrappedRef = React.createRef();
-    await act(async () => {
-      root.render(
-        <TestContainer first={instance0} second={instance1} ref={wrappedRef} />,
-      );
-    });
-    const div = container.firstChild;
+    let wrapped = <TestContainer first={instance0} second={instance1} />;
 
-    const beforeA = div.firstChild;
-    const beforeB = div.lastChild;
-    await act(async () => {
-      wrappedRef.current.swap();
-    });
-    const afterA = div.lastChild;
-    const afterB = div.firstChild;
+    wrapped = ReactDOM.render(wrapped, document.createElement('div'));
+    const div = ReactDOM.findDOMNode(wrapped);
+
+    const beforeA = div.childNodes[0];
+    const beforeB = div.childNodes[1];
+    wrapped.swap();
+    const afterA = div.childNodes[1];
+    const afterB = div.childNodes[0];
 
     expect(beforeA).toBe(afterA);
     expect(beforeB).toBe(afterB);
   });
 
-  it('should not allow implicit and explicit keys to collide', async () => {
+  it('should not allow implicit and explicit keys to collide', () => {
     const component = (
       <div>
         <span />
@@ -290,16 +258,12 @@ describe('ReactIdentity', () => {
       </div>
     );
 
-    const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    await expect(
-      act(() => {
-        root.render(component);
-      }),
-    ).resolves.not.toThrow();
+    expect(function() {
+      ReactTestUtils.renderIntoDocument(component);
+    }).not.toThrow();
   });
 
-  it('should throw if key is a Temporal-like object', async () => {
+  it('should throw if key is a Temporal-like object', () => {
     class TemporalLike {
       valueOf() {
         // Throwing here is the behavior of ECMAScript "Temporal" date/time API.
@@ -312,18 +276,18 @@ describe('ReactIdentity', () => {
     }
 
     const el = document.createElement('div');
-    const root = ReactDOMClient.createRoot(el);
-    await expect(() =>
-      expect(() => {
-        root.render(
-          <div>
-            <span key={new TemporalLike()} />
-          </div>,
-        );
-      }).toThrowError(new TypeError('prod message')),
+    const test = () =>
+      ReactDOM.render(
+        <div>
+          <span key={new TemporalLike()} />
+        </div>,
+        el,
+      );
+    expect(() =>
+      expect(test).toThrowError(new TypeError('prod message')),
     ).toErrorDev(
       'The provided key is an unsupported type TemporalLike.' +
-        ' This value must be coerced to a string before using it here.',
+        ' This value must be coerced to a string before before using it here.',
       {withoutStack: true},
     );
   });

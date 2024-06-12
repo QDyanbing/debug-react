@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -15,21 +15,20 @@ import {
 } from 'react-devtools-shared/src/backendAPI';
 import {fillInPath} from 'react-devtools-shared/src/hydration';
 
-import type {LRUCache} from 'react-devtools-shared/src/frontend/types';
+import type {LRUCache} from 'react-devtools-shared/src/types';
 import type {FrontendBridge} from 'react-devtools-shared/src/bridge';
 import type {
   InspectElementError,
   InspectElementFullData,
   InspectElementHydratedPath,
 } from 'react-devtools-shared/src/backend/types';
-import UserError from 'react-devtools-shared/src/errors/UserError';
-import UnknownHookError from 'react-devtools-shared/src/errors/UnknownHookError';
 import type {
   Element,
   InspectedElement as InspectedElementFrontend,
   InspectedElementResponseType,
-  InspectedElementPath,
-} from 'react-devtools-shared/src/frontend/types';
+} from 'react-devtools-shared/src/devtools/views/Components/types';
+import UserError from 'react-devtools-shared/src/errors/UserError';
+import UnknownHookError from 'react-devtools-shared/src/errors/UnknownHookError';
 
 // Maps element ID to inspected data.
 // We use an LRU for this rather than a WeakMap because of how the "no-change" optimization works.
@@ -40,23 +39,31 @@ import type {
 // This doens't work properly though when component filters are changed,
 // because this will cause the Store to dump all roots and re-initialize the tree (recreating the Element objects).
 // So instead we key on Element ID (which is stable in this case) and use an LRU for eviction.
-const inspectedElementCache: LRUCache<number, InspectedElementFrontend> =
-  new LRU({
-    max: 25,
-  });
+const inspectedElementCache: LRUCache<
+  number,
+  InspectedElementFrontend,
+> = new LRU({
+  max: 25,
+});
+
+type Path = Array<string | number>;
 
 type InspectElementReturnType = [
   InspectedElementFrontend,
   InspectedElementResponseType,
 ];
 
-export function inspectElement(
+export function inspectElement({
+  bridge,
+  element,
+  path,
+  rendererID,
+}: {|
   bridge: FrontendBridge,
   element: Element,
-  path: InspectedElementPath | null,
+  path: Path | null,
   rendererID: number,
-  shouldListenToPauseEvents: boolean = false,
-): Promise<InspectElementReturnType> {
+|}): Promise<InspectElementReturnType> {
   const {id} = element;
 
   // This could indicate that the DevTools UI has been closed and reopened.
@@ -64,14 +71,13 @@ export function inspectElement(
   // In this case, we need to tell it to resend the full data.
   const forceFullData = !inspectedElementCache.has(id);
 
-  return inspectElementAPI(
+  return inspectElementAPI({
     bridge,
     forceFullData,
     id,
     path,
     rendererID,
-    shouldListenToPauseEvents,
-  ).then((data: any) => {
+  }).then((data: any) => {
     const {type} = data;
 
     let inspectedElement;
@@ -137,14 +143,12 @@ export function inspectElement(
           inspectedElement = {...inspectedElement};
 
           // Merge hydrated data
-          if (path != null) {
-            fillInPath(
-              inspectedElement,
-              value,
-              path,
-              hydrateHelper(value, path),
-            );
-          }
+          fillInPath(
+            inspectedElement,
+            value,
+            ((path: any): Path),
+            hydrateHelper(value, ((path: any): Path)),
+          );
 
           inspectedElementCache.set(id, inspectedElement);
 

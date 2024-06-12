@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,6 +7,7 @@
  * @flow
  */
 
+import {gt, gte} from 'semver';
 import {
   ComponentFilterDisplayName,
   ComponentFilterElementType,
@@ -25,28 +26,21 @@ import {
   ElementTypeSuspenseList,
   ElementTypeTracingMarker,
   StrictMode,
-} from 'react-devtools-shared/src/frontend/types';
+} from 'react-devtools-shared/src/types';
 import {
   deletePathInObject,
   getDisplayName,
-  getWrappedDisplayName,
   getDefaultComponentFilters,
   getInObject,
   getUID,
   renamePathInObject,
   setInObject,
   utfEncodeString,
-  filterOutLocationComponentFilters,
 } from 'react-devtools-shared/src/utils';
 import {sessionStorageGetItem} from 'react-devtools-shared/src/storage';
 import {
-  gt,
-  gte,
-  parseSourceFromComponentStack,
-  serializeToString,
-} from 'react-devtools-shared/src/backend/utils';
-import {
   cleanForBridge,
+  copyToClipboard,
   copyWithDelete,
   copyWithRename,
   copyWithSet,
@@ -68,7 +62,7 @@ import {
 } from '../constants';
 import {inspectHooksOfFiber} from 'react-debug-tools';
 import {
-  patchConsoleUsingWindowValues,
+  patch as patchConsole,
   registerRenderer as registerRendererWithConsole,
   patchForStrictMode as patchConsoleForStrictMode,
   unpatchForStrictMode as unpatchConsoleForStrictMode,
@@ -81,12 +75,10 @@ import {
   PROVIDER_SYMBOL_STRING,
   CONTEXT_NUMBER,
   CONTEXT_SYMBOL_STRING,
-  CONSUMER_SYMBOL_STRING,
   STRICT_MODE_NUMBER,
   STRICT_MODE_SYMBOL_STRING,
   PROFILER_NUMBER,
   PROFILER_SYMBOL_STRING,
-  REACT_MEMO_CACHE_SENTINEL,
   SCOPE_NUMBER,
   SCOPE_SYMBOL_STRING,
   FORWARD_REF_NUMBER,
@@ -96,7 +88,10 @@ import {
   SERVER_CONTEXT_SYMBOL_STRING,
 } from './ReactSymbols';
 import {format} from './utils';
-import {enableStyleXFeatures} from 'react-devtools-feature-flags';
+import {
+  enableProfilerChangedHookIndices,
+  enableStyleXFeatures,
+} from 'react-devtools-feature-flags';
 import is from 'shared/objectIs';
 import hasOwnProperty from 'shared/hasOwnProperty';
 import {getStyleXData} from './StyleX/utils';
@@ -120,53 +115,33 @@ import type {
   RendererInterface,
   SerializedElement,
   WorkTagMap,
-  CurrentDispatcherRef,
-  LegacyDispatcherRef,
 } from './types';
 import type {
   ComponentFilter,
   ElementType,
   Plugins,
-} from 'react-devtools-shared/src/frontend/types';
-import type {Source} from 'react-devtools-shared/src/shared/types';
-import {getStackByFiberInDevAndProd} from './DevToolsFiberComponentStack';
+} from 'react-devtools-shared/src/types';
 
 type getDisplayNameForFiberType = (fiber: Fiber) => string | null;
-type getTypeSymbolType = (type: any) => symbol | number;
+type getTypeSymbolType = (type: any) => Symbol | number;
 
-type ReactPriorityLevelsType = {
+type ReactPriorityLevelsType = {|
   ImmediatePriority: number,
   UserBlockingPriority: number,
   NormalPriority: number,
   LowPriority: number,
   IdlePriority: number,
   NoPriority: number,
-};
+|};
 
-export function getDispatcherRef(renderer: {
-  +currentDispatcherRef?: LegacyDispatcherRef | CurrentDispatcherRef,
-  ...
-}): void | CurrentDispatcherRef {
-  if (renderer.currentDispatcherRef === undefined) {
-    return undefined;
-  }
-  const injectedRef = renderer.currentDispatcherRef;
-  if (
-    typeof injectedRef.H === 'undefined' &&
-    typeof injectedRef.current !== 'undefined'
-  ) {
-    // We got a legacy dispatcher injected, let's create a wrapper proxy to translate.
-    return {
-      get H() {
-        return (injectedRef: any).current;
-      },
-      set H(value) {
-        (injectedRef: any).current = value;
-      },
-    };
-  }
-  return (injectedRef: any);
-}
+type ReactTypeOfSideEffectType = {|
+  DidCapture: number,
+  NoFlags: number,
+  PerformedWork: number,
+  Placement: number,
+  Incomplete: number,
+  Hydrating: number,
+|};
 
 function getFiberFlags(fiber: Fiber): number {
   // The name of this field changed from "effectTag" to "flags"
@@ -175,18 +150,29 @@ function getFiberFlags(fiber: Fiber): number {
 
 // Some environments (e.g. React Native / Hermes) don't support the performance API yet.
 const getCurrentTime =
-  // $FlowFixMe[method-unbinding]
   typeof performance === 'object' && typeof performance.now === 'function'
     ? () => performance.now()
     : () => Date.now();
 
-export function getInternalReactConstants(version: string): {
+export function getInternalReactConstants(
+  version: string,
+): {|
   getDisplayNameForFiber: getDisplayNameForFiberType,
   getTypeSymbol: getTypeSymbolType,
   ReactPriorityLevels: ReactPriorityLevelsType,
+  ReactTypeOfSideEffect: ReactTypeOfSideEffectType,
   ReactTypeOfWork: WorkTagMap,
   StrictModeBits: number,
-} {
+|} {
+  const ReactTypeOfSideEffect: ReactTypeOfSideEffectType = {
+    DidCapture: 0b10000000,
+    NoFlags: 0b00,
+    PerformedWork: 0b01,
+    Placement: 0b10,
+    Incomplete: 0b10000000000000,
+    Hydrating: 0b1000000000000,
+  };
+
   // **********************************************************
   // The section below is copied from files in React repo.
   // Keep it in sync, and add version guards if it changes.
@@ -249,12 +235,9 @@ export function getInternalReactConstants(version: string): {
       HostComponent: 5,
       HostPortal: 4,
       HostRoot: 3,
-      HostHoistable: 26, // In reality, 18.2+. But doesn't hurt to include it here
-      HostSingleton: 27, // Same as above
       HostText: 6,
       IncompleteClassComponent: 17,
-      IncompleteFunctionComponent: 28,
-      IndeterminateComponent: 2, // removed in 19.0.0
+      IndeterminateComponent: 2,
       LazyComponent: 16,
       LegacyHiddenComponent: 23,
       MemoComponent: 14,
@@ -284,11 +267,8 @@ export function getInternalReactConstants(version: string): {
       HostComponent: 5,
       HostPortal: 4,
       HostRoot: 3,
-      HostHoistable: -1, // Doesn't exist yet
-      HostSingleton: -1, // Doesn't exist yet
       HostText: 6,
       IncompleteClassComponent: 17,
-      IncompleteFunctionComponent: -1, // Doesn't exist yet
       IndeterminateComponent: 2,
       LazyComponent: 16,
       LegacyHiddenComponent: 24,
@@ -318,11 +298,8 @@ export function getInternalReactConstants(version: string): {
       HostComponent: 5,
       HostPortal: 4,
       HostRoot: 3,
-      HostHoistable: -1, // Doesn't exist yet
-      HostSingleton: -1, // Doesn't exist yet
       HostText: 6,
       IncompleteClassComponent: 17,
-      IncompleteFunctionComponent: -1, // Doesn't exist yet
       IndeterminateComponent: 2,
       LazyComponent: 16,
       LegacyHiddenComponent: -1,
@@ -352,11 +329,8 @@ export function getInternalReactConstants(version: string): {
       HostComponent: 7,
       HostPortal: 6,
       HostRoot: 5,
-      HostHoistable: -1, // Doesn't exist yet
-      HostSingleton: -1, // Doesn't exist yet
       HostText: 8,
       IncompleteClassComponent: -1, // Doesn't exist yet
-      IncompleteFunctionComponent: -1, // Doesn't exist yet
       IndeterminateComponent: 4,
       LazyComponent: -1, // Doesn't exist yet
       LegacyHiddenComponent: -1,
@@ -386,11 +360,8 @@ export function getInternalReactConstants(version: string): {
       HostComponent: 5,
       HostPortal: 4,
       HostRoot: 3,
-      HostHoistable: -1, // Doesn't exist yet
-      HostSingleton: -1, // Doesn't exist yet
       HostText: 6,
       IncompleteClassComponent: -1, // Doesn't exist yet
-      IncompleteFunctionComponent: -1, // Doesn't exist yet
       IndeterminateComponent: 0,
       LazyComponent: -1, // Doesn't exist yet
       LegacyHiddenComponent: -1,
@@ -410,13 +381,13 @@ export function getInternalReactConstants(version: string): {
   // End of copied code.
   // **********************************************************
 
-  function getTypeSymbol(type: any): symbol | number {
+  function getTypeSymbol(type: any): Symbol | number {
     const symbolOrNumber =
       typeof type === 'object' && type !== null ? type.$$typeof : type;
 
+    // $FlowFixMe Flow doesn't know about typeof "symbol"
     return typeof symbolOrNumber === 'symbol'
-      ? // $FlowFixMe[incompatible-return] `toString()` doesn't match the type signature?
-        symbolOrNumber.toString()
+      ? symbolOrNumber.toString()
       : symbolOrNumber;
   }
 
@@ -424,13 +395,10 @@ export function getInternalReactConstants(version: string): {
     CacheComponent,
     ClassComponent,
     IncompleteClassComponent,
-    IncompleteFunctionComponent,
     FunctionComponent,
     IndeterminateComponent,
     ForwardRef,
     HostRoot,
-    HostHoistable,
-    HostSingleton,
     HostComponent,
     HostPortal,
     HostText,
@@ -447,7 +415,7 @@ export function getInternalReactConstants(version: string): {
     TracingMarkerComponent,
   } = ReactTypeOfWork;
 
-  function resolveFiberType(type: any): $FlowFixMe {
+  function resolveFiberType(type: any) {
     const typeSymbol = getTypeSymbol(type);
     switch (typeSymbol) {
       case MEMO_NUMBER:
@@ -463,10 +431,7 @@ export function getInternalReactConstants(version: string): {
   }
 
   // NOTICE Keep in sync with shouldFilterFiber() and other get*ForFiber methods
-  function getDisplayNameForFiber(
-    fiber: Fiber,
-    shouldSkipForgetCheck: boolean = false,
-  ): string | null {
+  function getDisplayNameForFiber(fiber: Fiber): string | null {
     const {elementType, type, tag} = fiber;
 
     let resolvedType = type;
@@ -475,38 +440,21 @@ export function getInternalReactConstants(version: string): {
     }
 
     let resolvedContext: any = null;
-    if (
-      !shouldSkipForgetCheck &&
-      // $FlowFixMe[incompatible-type] fiber.updateQueue is mixed
-      (fiber.updateQueue?.memoCache != null ||
-        fiber.memoizedState?.memoizedState?.[REACT_MEMO_CACHE_SENTINEL])
-    ) {
-      const displayNameWithoutForgetWrapper = getDisplayNameForFiber(
-        fiber,
-        true,
-      );
-      if (displayNameWithoutForgetWrapper == null) {
-        return null;
-      }
-
-      return `Forget(${displayNameWithoutForgetWrapper})`;
-    }
 
     switch (tag) {
       case CacheComponent:
         return 'Cache';
       case ClassComponent:
       case IncompleteClassComponent:
-      case IncompleteFunctionComponent:
+        return getDisplayName(resolvedType);
       case FunctionComponent:
       case IndeterminateComponent:
         return getDisplayName(resolvedType);
       case ForwardRef:
-        return getWrappedDisplayName(
-          elementType,
-          resolvedType,
-          'ForwardRef',
-          'Anonymous',
+        // Mirror https://github.com/facebook/react/blob/7c21bf72ace77094fd1910cc350a548287ef8350/packages/shared/getComponentName.js#L27-L37
+        return (
+          (type && type.displayName) ||
+          getDisplayName(resolvedType, 'Anonymous')
         );
       case HostRoot:
         const fiberRoot = fiber.stateNode;
@@ -515,14 +463,11 @@ export function getInternalReactConstants(version: string): {
         }
         return null;
       case HostComponent:
-      case HostSingleton:
-      case HostHoistable:
         return type;
       case HostPortal:
       case HostText:
-        return null;
       case Fragment:
-        return 'Fragment';
+        return null;
       case LazyComponent:
         // This display name will not be user visible.
         // Once a Lazy component loads its inner component, React replaces the tag and type.
@@ -530,12 +475,10 @@ export function getInternalReactConstants(version: string): {
         return 'Lazy';
       case MemoComponent:
       case SimpleMemoComponent:
-        // Display name in React does not use `Memo` as a wrapper but fallback name.
-        return getWrappedDisplayName(
-          elementType,
-          resolvedType,
-          'Memo',
-          'Anonymous',
+        return (
+          (elementType && elementType.displayName) ||
+          (type && type.displayName) ||
+          getDisplayName(resolvedType, 'Anonymous')
         );
       case SuspenseComponent:
         return 'Suspense';
@@ -569,15 +512,6 @@ export function getInternalReactConstants(version: string): {
           case CONTEXT_NUMBER:
           case CONTEXT_SYMBOL_STRING:
           case SERVER_CONTEXT_SYMBOL_STRING:
-            if (
-              fiber.type._context === undefined &&
-              fiber.type.Provider === fiber.type
-            ) {
-              // In 19+, Context.Provider === Context, so this is a provider.
-              resolvedContext = fiber.type;
-              return `${resolvedContext.displayName || 'Context'}.Provider`;
-            }
-
             // 16.3-16.5 read from "type" because the Consumer is the actual context object.
             // 16.6+ should read from "type._context" because Consumer can be different (in DEV).
             // NOTE Keep in sync with inspectElementRaw()
@@ -585,10 +519,6 @@ export function getInternalReactConstants(version: string): {
 
             // NOTE: TraceUpdatesBackendManager depends on the name ending in '.Consumer'
             // If you change the name, figure out a more resilient way to detect it.
-            return `${resolvedContext.displayName || 'Context'}.Consumer`;
-          case CONSUMER_SYMBOL_STRING:
-            // 19+
-            resolvedContext = fiber.type._context;
             return `${resolvedContext.displayName || 'Context'}.Consumer`;
           case STRICT_MODE_NUMBER:
           case STRICT_MODE_SYMBOL_STRING:
@@ -612,6 +542,7 @@ export function getInternalReactConstants(version: string): {
     getTypeSymbol,
     ReactPriorityLevels,
     ReactTypeOfWork,
+    ReactTypeOfSideEffect,
     StrictModeBits,
   };
 }
@@ -626,8 +557,6 @@ const fiberToIDMap: Map<Fiber, number> = new Map();
 // This Map is used to e.g. get the display name for a Fiber or schedule an update,
 // operations that should be the same whether the current and work-in-progress Fiber is used.
 const idToArbitraryFiberMap: Map<number, Fiber> = new Map();
-
-const fiberToComponentStackMap: WeakMap<Fiber, string> = new WeakMap();
 
 export function attach(
   hook: DevToolsHook,
@@ -646,8 +575,16 @@ export function attach(
     getTypeSymbol,
     ReactPriorityLevels,
     ReactTypeOfWork,
+    ReactTypeOfSideEffect,
     StrictModeBits,
   } = getInternalReactConstants(version);
+  const {
+    DidCapture,
+    Hydrating,
+    NoFlags,
+    PerformedWork,
+    Placement,
+  } = ReactTypeOfSideEffect;
   const {
     CacheComponent,
     ClassComponent,
@@ -657,13 +594,10 @@ export function attach(
     Fragment,
     FunctionComponent,
     HostRoot,
-    HostHoistable,
-    HostSingleton,
     HostPortal,
     HostComponent,
     HostText,
     IncompleteClassComponent,
-    IncompleteFunctionComponent,
     IndeterminateComponent,
     LegacyHiddenComponent,
     MemoComponent,
@@ -726,8 +660,6 @@ export function attach(
       getDisplayNameForFiber,
       getIsProfiling: () => isProfiling,
       getLaneLabelMap,
-      currentDispatcherRef: getDispatcherRef(renderer),
-      workTagMap: ReactTypeOfWork,
       reactVersion: version,
     });
 
@@ -872,18 +804,38 @@ export function attach(
   // Patching the console enables DevTools to do a few useful things:
   // * Append component stacks to warnings and error messages
   // * Disable logging during re-renders to inspect hooks (see inspectHooksOfFiber)
-  registerRendererWithConsole(renderer, onErrorOrWarning);
+  //
+  // Don't patch in test environments because we don't want to interfere with Jest's own console overrides.
+  if (process.env.NODE_ENV !== 'test') {
+    registerRendererWithConsole(renderer, onErrorOrWarning);
 
-  // The renderer interface can't read these preferences directly,
-  // because it is stored in localStorage within the context of the extension.
-  // It relies on the extension to pass the preference through via the global.
-  patchConsoleUsingWindowValues();
+    // The renderer interface can't read these preferences directly,
+    // because it is stored in localStorage within the context of the extension.
+    // It relies on the extension to pass the preference through via the global.
+    const appendComponentStack =
+      window.__REACT_DEVTOOLS_APPEND_COMPONENT_STACK__ !== false;
+    const breakOnConsoleErrors =
+      window.__REACT_DEVTOOLS_BREAK_ON_CONSOLE_ERRORS__ === true;
+    const showInlineWarningsAndErrors =
+      window.__REACT_DEVTOOLS_SHOW_INLINE_WARNINGS_AND_ERRORS__ !== false;
+    const hideConsoleLogsInStrictMode =
+      window.__REACT_DEVTOOLS_HIDE_CONSOLE_LOGS_IN_STRICT_MODE__ === true;
+    const browserTheme = window.__REACT_DEVTOOLS_BROWSER_THEME__;
+
+    patchConsole({
+      appendComponentStack,
+      breakOnConsoleErrors,
+      showInlineWarningsAndErrors,
+      hideConsoleLogsInStrictMode,
+      browserTheme,
+    });
+  }
 
   const debug = (
     name: string,
     fiber: Fiber,
     parentFiber: ?Fiber,
-    extraString: string = '',
+    extraString?: string = '',
   ): void => {
     if (__DEBUG__) {
       const displayName =
@@ -908,7 +860,12 @@ export function attach(
         'color: purple;',
         'color: black;',
       );
-      console.log(new Error().stack.split('\n').slice(1).join('\n'));
+      console.log(
+        new Error().stack
+          .split('\n')
+          .slice(1)
+          .join('\n'),
+      );
       console.groupEnd();
     }
   };
@@ -964,11 +921,7 @@ export function attach(
   // because they are stored in localStorage within the context of the extension.
   // Instead it relies on the extension to pass filters through.
   if (window.__REACT_DEVTOOLS_COMPONENT_FILTERS__ != null) {
-    const componentFiltersWithoutLocationBasedOnes =
-      filterOutLocationComponentFilters(
-        window.__REACT_DEVTOOLS_COMPONENT_FILTERS__,
-      );
-    applyComponentFilters(componentFiltersWithoutLocationBasedOnes);
+    applyComponentFilters(window.__REACT_DEVTOOLS_COMPONENT_FILTERS__);
   } else {
     // Unfortunately this feature is not expected to work for React Native for now.
     // It would be annoying for us to spam YellowBox warnings with unactionable stuff,
@@ -1022,7 +975,7 @@ export function attach(
 
   // NOTICE Keep in sync with get*ForFiber methods
   function shouldFilterFiber(fiber: Fiber): boolean {
-    const {tag, type, key} = fiber;
+    const {_debugSource, tag, type} = fiber;
 
     switch (tag) {
       case DehydratedSuspenseComponent:
@@ -1034,14 +987,13 @@ export function attach(
         return true;
       case HostPortal:
       case HostText:
+      case Fragment:
       case LegacyHiddenComponent:
       case OffscreenComponent:
         return true;
       case HostRoot:
         // It is never valid to filter the root element.
         return false;
-      case Fragment:
-        return key === null;
       default:
         const typeSymbol = getTypeSymbol(type);
 
@@ -1074,21 +1026,15 @@ export function attach(
       }
     }
 
-    /* DISABLED: https://github.com/facebook/react/pull/28417
-    if (hideElementsWithPaths.size > 0) {
-      const source = getSourceForFiber(fiber);
-
-      if (source != null) {
-        const {fileName} = source;
-        // eslint-disable-next-line no-for-of-loops/no-for-of-loops
-        for (const pathRegExp of hideElementsWithPaths) {
-          if (pathRegExp.test(fileName)) {
-            return true;
-          }
+    if (_debugSource != null && hideElementsWithPaths.size > 0) {
+      const {fileName} = _debugSource;
+      // eslint-disable-next-line no-for-of-loops/no-for-of-loops
+      for (const pathRegExp of hideElementsWithPaths) {
+        if (pathRegExp.test(fileName)) {
+          return true;
         }
       }
     }
-    */
 
     return false;
   }
@@ -1101,7 +1047,6 @@ export function attach(
       case ClassComponent:
       case IncompleteClassComponent:
         return ElementTypeClass;
-      case IncompleteFunctionComponent:
       case FunctionComponent:
       case IndeterminateComponent:
         return ElementTypeFunction;
@@ -1110,8 +1055,6 @@ export function attach(
       case HostRoot:
         return ElementTypeRoot;
       case HostComponent:
-      case HostHoistable:
-      case HostSingleton:
         return ElementTypeHostComponent;
       case HostPortal:
       case HostText:
@@ -1298,12 +1241,10 @@ export function attach(
       }
 
       fiberToIDMap.delete(fiber);
-      fiberToComponentStackMap.delete(fiber);
 
       const {alternate} = fiber;
       if (alternate !== null) {
         fiberToIDMap.delete(alternate);
-        fiberToComponentStackMap.delete(alternate);
       }
 
       if (forceErrorForFiberIDs.has(fiberID)) {
@@ -1349,12 +1290,19 @@ export function attach(
           };
 
           // Only traverse the hooks list once, depending on what info we're returning.
-          const indices = getChangedHooksIndices(
-            prevFiber.memoizedState,
-            nextFiber.memoizedState,
-          );
-          data.hooks = indices;
-          data.didHooksChange = indices !== null && indices.length > 0;
+          if (enableProfilerChangedHookIndices) {
+            const indices = getChangedHooksIndices(
+              prevFiber.memoizedState,
+              nextFiber.memoizedState,
+            );
+            data.hooks = indices;
+            data.didHooksChange = indices !== null && indices.length > 0;
+          } else {
+            data.didHooksChange = didHooksChange(
+              prevFiber.memoizedState,
+              nextFiber.memoizedState,
+            );
+          }
 
           return data;
         }
@@ -1373,7 +1321,6 @@ export function attach(
           const id = getFiberIDThrows(fiber);
           const contexts = getContextsForFiber(fiber);
           if (contexts !== null) {
-            // $FlowFixMe[incompatible-use] found when upgrading Flow
             idToContextsMap.set(id, contexts);
           }
         }
@@ -1444,10 +1391,8 @@ export function attach(
   function getContextChangedKeys(fiber: Fiber): null | boolean | Array<string> {
     if (idToContextsMap !== null) {
       const id = getFiberIDThrows(fiber);
-      // $FlowFixMe[incompatible-use] found when upgrading Flow
       const prevContexts = idToContextsMap.has(id)
-        ? // $FlowFixMe[incompatible-use] found when upgrading Flow
-          idToContextsMap.get(id)
+        ? idToContextsMap.get(id)
         : null;
       const nextContexts = getContextsForFiber(fiber);
 
@@ -1506,20 +1451,22 @@ export function attach(
 
     const boundHasOwnProperty = hasOwnProperty.bind(queue);
 
-    // Detect the shape of useState() / useReducer() / useTransition()
+    // Detect the shape of useState() or useReducer()
     // using the attributes that are unique to these hooks
     // but also stable (e.g. not tied to current Lanes implementation)
-    // We don't check for dispatch property, because useTransition doesn't have it
-    if (boundHasOwnProperty('pending')) {
-      return true;
-    }
+    const isStateOrReducer =
+      boundHasOwnProperty('pending') &&
+      boundHasOwnProperty('dispatch') &&
+      typeof queue.dispatch === 'function';
 
     // Detect useSyncExternalStore()
-    return (
+    const isSyncExternalStore =
       boundHasOwnProperty('value') &&
       boundHasOwnProperty('getSnapshot') &&
-      typeof queue.getSnapshot === 'function'
-    );
+      typeof queue.getSnapshot === 'function';
+
+    // These are the only types of hooks that can schedule an update.
+    return isStateOrReducer || isSyncExternalStore;
   }
 
   function didStatefulHookChange(prev: any, next: any): boolean {
@@ -1533,13 +1480,12 @@ export function attach(
     return false;
   }
 
-  function getChangedHooksIndices(prev: any, next: any): null | Array<number> {
+  function didHooksChange(prev: any, next: any): boolean {
     if (prev == null || next == null) {
-      return null;
+      return false;
     }
 
-    const indices = [];
-    let index = 0;
+    // We can't report anything meaningful for hooks changes.
     if (
       next.hasOwnProperty('baseState') &&
       next.hasOwnProperty('memoizedState') &&
@@ -1548,15 +1494,45 @@ export function attach(
     ) {
       while (next !== null) {
         if (didStatefulHookChange(prev, next)) {
-          indices.push(index);
+          return true;
+        } else {
+          next = next.next;
+          prev = prev.next;
         }
-        next = next.next;
-        prev = prev.next;
-        index++;
       }
     }
 
-    return indices;
+    return false;
+  }
+
+  function getChangedHooksIndices(prev: any, next: any): null | Array<number> {
+    if (enableProfilerChangedHookIndices) {
+      if (prev == null || next == null) {
+        return null;
+      }
+
+      const indices = [];
+      let index = 0;
+      if (
+        next.hasOwnProperty('baseState') &&
+        next.hasOwnProperty('memoizedState') &&
+        next.hasOwnProperty('next') &&
+        next.hasOwnProperty('queue')
+      ) {
+        while (next !== null) {
+          if (didStatefulHookChange(prev, next)) {
+            indices.push(index);
+          }
+          next = next.next;
+          prev = prev.next;
+          index++;
+        }
+      }
+
+      return indices;
+    }
+
+    return null;
   }
 
   function getChangedKeys(prev: any, next: any): null | Array<string> {
@@ -1597,10 +1573,7 @@ export function attach(
       case ForwardRef:
         // For types that execute user code, we check PerformedWork effect.
         // We don't reflect bailouts (either referential or sCU) in DevTools.
-        // TODO: This flag is a leaked implementation detail. Once we start
-        // releasing DevTools in lockstep with React, we should import a
-        // function from the reconciler instead.
-        const PerformedWork = 0b000000000000000000000000001;
+        // eslint-disable-next-line no-bitwise
         return (getFiberFlags(nextFiber) & PerformedWork) === PerformedWork;
       // Note: ContextConsumer only gets PerformedWork effect in 16.3.3+
       // so it won't get highlighted with React 16.3.0 to 16.3.2.
@@ -1617,10 +1590,10 @@ export function attach(
 
   type OperationsArray = Array<number>;
 
-  type StringTableEntry = {
+  type StringTableEntry = {|
     encodedString: Array<number>,
     id: number,
-  };
+  |};
 
   const pendingOperations: OperationsArray = [];
   const pendingRealUnmountedIDs: Array<number> = [];
@@ -1672,7 +1645,7 @@ export function attach(
     }
   }
 
-  let flushPendingErrorsAndWarningsAfterDelayTimeoutID: null | TimeoutID = null;
+  let flushPendingErrorsAndWarningsAfterDelayTimeoutID = null;
 
   function clearPendingErrorsAndWarningsAfterDelay() {
     if (flushPendingErrorsAndWarningsAfterDelayTimeoutID !== null) {
@@ -1835,11 +1808,11 @@ export function attach(
       pendingSimulatedUnmountedIDs.length +
       (pendingUnmountedRootID === null ? 0 : 1);
 
-    const operations = new Array<number>(
+    const operations = new Array(
       // Identify which renderer this update is coming from.
       2 + // [rendererID, rootFiberID]
-        // How big is the string table?
-        1 + // [stringTableLength]
+      // How big is the string table?
+      1 + // [stringTableLength]
         // Then goes the actual string table.
         pendingStringTableLength +
         // All unmounts are batched in a single message.
@@ -1984,24 +1957,15 @@ export function attach(
       const {key} = fiber;
       const displayName = getDisplayNameForFiber(fiber);
       const elementType = getElementTypeForFiber(fiber);
-      const debugOwner = fiber._debugOwner;
+      const {_debugOwner} = fiber;
 
       // Ideally we should call getFiberIDThrows() for _debugOwner,
       // since owners are almost always higher in the tree (and so have already been processed),
       // but in some (rare) instances reported in open source, a descendant mounts before an owner.
       // Since this is a DEV only field it's probably okay to also just lazily generate and ID here if needed.
       // See https://github.com/facebook/react/issues/21445
-      let ownerID: number;
-      if (debugOwner != null) {
-        if (typeof debugOwner.tag === 'number') {
-          ownerID = getOrGenerateFiberID((debugOwner: any));
-        } else {
-          // TODO: Track Server Component Owners.
-          ownerID = 0;
-        }
-      } else {
-        ownerID = 0;
-      }
+      const ownerID =
+        _debugOwner != null ? getOrGenerateFiberID(_debugOwner) : 0;
       const parentID = parentFiber ? getFiberIDThrows(parentFiber) : 0;
 
       const displayNameStringID = getStringID(displayName);
@@ -2119,8 +2083,9 @@ export function attach(
 
       // If we have the tree selection from previous reload, try to match this Fiber.
       // Also remember whether to do the same for siblings.
-      const mightSiblingsBeOnTrackedPath =
-        updateTrackedPathStateBeforeMount(fiber);
+      const mightSiblingsBeOnTrackedPath = updateTrackedPathStateBeforeMount(
+        fiber,
+      );
 
       const shouldIncludeInTree = !shouldFilterFiber(fiber);
       if (shouldIncludeInTree) {
@@ -2278,8 +2243,7 @@ export function attach(
           // Note that we should do this for any fiber we performed work on, regardless of its actualDuration value.
           // In some cases actualDuration might be 0 for fibers we worked on (particularly if we're using Date.now)
           // In other cases (e.g. Memo) actualDuration might be greater than 0 even if we "bailed out".
-          const metadata =
-            ((currentCommitProfilingMetadata: any): CommitProfilingData);
+          const metadata = ((currentCommitProfilingMetadata: any): CommitProfilingData);
           metadata.durations.push(id, actualDuration, selfDuration);
           metadata.maxActualDuration = Math.max(
             metadata.maxActualDuration,
@@ -2312,7 +2276,7 @@ export function attach(
 
     // This is a naive implementation that shallowly recourses children.
     // We might want to revisit this if it proves to be too inefficient.
-    let child: null | Fiber = childSet;
+    let child = childSet;
     while (child !== null) {
       findReorderedChildrenRecursively(child, nextChildren);
       child = child.sibling;
@@ -2439,18 +2403,6 @@ export function attach(
       const prevFallbackChildSet = prevFiberChild
         ? prevFiberChild.sibling
         : null;
-
-      if (prevFallbackChildSet == null && nextFallbackChildSet != null) {
-        mountFiberRecursively(
-          nextFallbackChildSet,
-          shouldIncludeInTree ? nextFiber : parentFiber,
-          true,
-          traceNearestHostComponentUpdate,
-        );
-
-        shouldResetChildren = true;
-      }
-
       if (
         nextFallbackChildSet != null &&
         prevFallbackChildSet != null &&
@@ -2605,7 +2557,7 @@ export function attach(
     // We don't patch any methods so there is no cleanup.
   }
 
-  function rootSupportsProfiling(root: any) {
+  function rootSupportsProfiling(root) {
     if (root.memoizedInteractions != null) {
       // v16 builds include this field for the scheduler/tracing API.
       return true;
@@ -2669,7 +2621,7 @@ export function attach(
     }
   }
 
-  function getUpdatersList(root: any): Array<SerializedElement> | null {
+  function getUpdatersList(root): Array<SerializedElement> | null {
     return root.memoizedUpdaters != null
       ? Array.from(root.memoizedUpdaters)
           .filter(fiber => getFiberIDUnsafe(fiber) !== null)
@@ -2677,33 +2629,30 @@ export function attach(
       : null;
   }
 
-  function handleCommitFiberUnmount(fiber: any) {
-    // If the untrackFiberSet already has the unmounted Fiber, this means we've already
-    // recordedUnmount, so we don't need to do it again. If we don't do this, we might
-    // end up double-deleting Fibers in some cases (like Legacy Suspense).
-    if (!untrackFibersSet.has(fiber)) {
-      // This is not recursive.
-      // We can't traverse fibers after unmounting so instead
-      // we rely on React telling us about each unmount.
-      recordUnmount(fiber, false);
-    }
+  function handleCommitFiberUnmount(fiber) {
+    // Flush any pending Fibers that we are untracking before processing the new commit.
+    // If we don't do this, we might end up double-deleting Fibers in some cases (like Legacy Suspense).
+    untrackFibers();
+
+    // This is not recursive.
+    // We can't traverse fibers after unmounting so instead
+    // we rely on React telling us about each unmount.
+    recordUnmount(fiber, false);
   }
 
-  function handlePostCommitFiberRoot(root: any) {
+  function handlePostCommitFiberRoot(root) {
     if (isProfiling && rootSupportsProfiling(root)) {
       if (currentCommitProfilingMetadata !== null) {
-        const {effectDuration, passiveEffectDuration} =
-          getEffectDurations(root);
-        // $FlowFixMe[incompatible-use] found when upgrading Flow
+        const {effectDuration, passiveEffectDuration} = getEffectDurations(
+          root,
+        );
         currentCommitProfilingMetadata.effectDuration = effectDuration;
-        // $FlowFixMe[incompatible-use] found when upgrading Flow
-        currentCommitProfilingMetadata.passiveEffectDuration =
-          passiveEffectDuration;
+        currentCommitProfilingMetadata.passiveEffectDuration = passiveEffectDuration;
       }
     }
   }
 
-  function handleCommitFiberRoot(root: any, priorityLevel: void | number) {
+  function handleCommitFiberRoot(root, priorityLevel) {
     const current = root.current;
     const alternate = current.alternate;
 
@@ -2778,10 +2727,9 @@ export function attach(
 
     if (isProfiling && isProfilingSupported) {
       if (!shouldBailoutWithPendingOperations()) {
-        const commitProfilingMetadata =
-          ((rootToCommitProfilingMetadataMap: any): CommitProfilingMetadataMap).get(
-            currentRootID,
-          );
+        const commitProfilingMetadata = ((rootToCommitProfilingMetadataMap: any): CommitProfilingMetadataMap).get(
+          currentRootID,
+        );
 
         if (commitProfilingMetadata != null) {
           commitProfilingMetadata.push(
@@ -2842,11 +2790,21 @@ export function attach(
 
   function findNativeNodesForFiberID(id: number) {
     try {
-      const fiber = findCurrentFiberUsingSlowPathById(id);
+      let fiber = findCurrentFiberUsingSlowPathById(id);
       if (fiber === null) {
         return null;
       }
-
+      // Special case for a timed-out Suspense.
+      const isTimedOutSuspense =
+        fiber.tag === SuspenseComponent && fiber.memoizedState !== null;
+      if (isTimedOutSuspense) {
+        // A timed-out Suspense's findDOMNode is useless.
+        // Try our best to find the fallback directly.
+        const maybeFallbackFiber = fiber.child && fiber.child.sibling;
+        if (maybeFallbackFiber != null) {
+          fiber = maybeFallbackFiber;
+        }
+      }
       const hostFibers = findAllCurrentHostFibers(id);
       return hostFibers.map(hostFiber => hostFiber.stateNode).filter(Boolean);
     } catch (err) {
@@ -2855,18 +2813,18 @@ export function attach(
     }
   }
 
-  function getDisplayNameForFiberID(id: number): null | string {
+  function getDisplayNameForFiberID(id) {
     const fiber = idToArbitraryFiberMap.get(id);
-    return fiber != null ? getDisplayNameForFiber(fiber) : null;
+    return fiber != null ? getDisplayNameForFiber(((fiber: any): Fiber)) : null;
   }
 
-  function getFiberForNative(hostInstance: NativeType) {
+  function getFiberForNative(hostInstance) {
     return renderer.findFiberByHostInstance(hostInstance);
   }
 
   function getFiberIDForNative(
-    hostInstance: NativeType,
-    findNearestUnfilteredAncestor: boolean = false,
+    hostInstance,
+    findNearestUnfilteredAncestor = false,
   ) {
     let fiber = renderer.findFiberByHostInstance(hostInstance);
     if (fiber != null) {
@@ -2882,7 +2840,7 @@ export function attach(
 
   // This function is copied from React and should be kept in sync:
   // https://github.com/facebook/react/blob/main/packages/react-reconciler/src/ReactFiberTreeReflection.js
-  function assertIsMounted(fiber: Fiber) {
+  function assertIsMounted(fiber) {
     if (getNearestMountedFiber(fiber) !== fiber) {
       throw new Error('Unable to find node on an unmounted component.');
     }
@@ -2892,25 +2850,19 @@ export function attach(
   // https://github.com/facebook/react/blob/main/packages/react-reconciler/src/ReactFiberTreeReflection.js
   function getNearestMountedFiber(fiber: Fiber): null | Fiber {
     let node = fiber;
-    let nearestMounted: null | Fiber = fiber;
+    let nearestMounted = fiber;
     if (!fiber.alternate) {
       // If there is no alternate, this might be a new tree that isn't inserted
       // yet. If it is, then it will have a pending insertion effect on it.
-      let nextNode: Fiber = node;
+      let nextNode = node;
       do {
         node = nextNode;
-        // TODO: This function, and these flags, are a leaked implementation
-        // detail. Once we start releasing DevTools in lockstep with React, we
-        // should import a function from the reconciler instead.
-        const Placement = 0b000000000000000000000000010;
-        const Hydrating = 0b000000000000001000000000000;
-        if ((node.flags & (Placement | Hydrating)) !== 0) {
+        if ((node.flags & (Placement | Hydrating)) !== NoFlags) {
           // This is an insertion or in-progress hydration. The nearest possible
           // mounted fiber is the parent but we need to continue to figure out
           // if that one is still mounted.
           nearestMounted = node.return;
         }
-        // $FlowFixMe[incompatible-type] we bail out when we get a null
         nextNode = node.return;
       } while (nextNode);
     } else {
@@ -3109,7 +3061,6 @@ export function attach(
     switch (tag) {
       case ClassComponent:
       case IncompleteClassComponent:
-      case IncompleteFunctionComponent:
       case IndeterminateComponent:
       case FunctionComponent:
         global.$type = type;
@@ -3145,17 +3096,15 @@ export function attach(
       return null;
     }
 
+    const {_debugOwner} = fiber;
+
     const owners: Array<SerializedElement> = [fiberToSerializedElement(fiber)];
 
-    let owner = fiber._debugOwner;
-    while (owner != null) {
-      if (typeof owner.tag === 'number') {
-        const ownerFiber: Fiber = (owner: any); // Refined
-        owners.unshift(fiberToSerializedElement(ownerFiber));
-        owner = ownerFiber._debugOwner;
-      } else {
-        // TODO: Track Server Component Owners.
-        break;
+    if (_debugOwner) {
+      let owner = _debugOwner;
+      while (owner !== null) {
+        owners.unshift(fiberToSerializedElement(owner));
+        owner = owner._debugOwner || null;
       }
     }
 
@@ -3216,7 +3165,8 @@ export function attach(
     }
 
     const {
-      _debugOwner: debugOwner,
+      _debugOwner,
+      _debugSource,
       stateNode,
       key,
       memoizedProps,
@@ -3246,7 +3196,6 @@ export function attach(
       tag === ClassComponent ||
       tag === FunctionComponent ||
       tag === IncompleteClassComponent ||
-      tag === IncompleteFunctionComponent ||
       tag === IndeterminateComponent ||
       tag === MemoComponent ||
       tag === ForwardRef ||
@@ -3264,14 +3213,8 @@ export function attach(
         }
       }
     } else if (
-      // Detect pre-19 Context Consumers
-      (typeSymbol === CONTEXT_NUMBER || typeSymbol === CONTEXT_SYMBOL_STRING) &&
-      !(
-        // In 19+, CONTEXT_SYMBOL_STRING means a Provider instead.
-        // It will be handled in a different branch below.
-        // Eventually, this entire branch can be removed.
-        (type._context === undefined && type.Provider === type)
-      )
+      typeSymbol === CONTEXT_NUMBER ||
+      typeSymbol === CONTEXT_SYMBOL_STRING
     ) {
       // 16.3-16.5 read from "type" because the Consumer is the actual context object.
       // 16.6+ should read from "type._context" because Consumer can be different (in DEV).
@@ -3303,35 +3246,6 @@ export function attach(
 
         current = current.return;
       }
-    } else if (
-      // Detect 19+ Context Consumers
-      typeSymbol === CONSUMER_SYMBOL_STRING
-    ) {
-      // This branch is 19+ only, where Context.Provider === Context.
-      // NOTE Keep in sync with getDisplayNameForFiber()
-      const consumerResolvedContext = type._context;
-
-      // Global context value.
-      context = consumerResolvedContext._currentValue || null;
-
-      // Look for overridden value.
-      let current = ((fiber: any): Fiber).return;
-      while (current !== null) {
-        const currentType = current.type;
-        const currentTypeSymbol = getTypeSymbol(currentType);
-        if (
-          // In 19+, these are Context Providers
-          currentTypeSymbol === CONTEXT_SYMBOL_STRING
-        ) {
-          const providerResolvedContext = currentType;
-          if (providerResolvedContext === consumerResolvedContext) {
-            context = current.memoizedProps.value;
-            break;
-          }
-        }
-
-        current = current.return;
-      }
     }
 
     let hasLegacyContext = false;
@@ -3343,19 +3257,13 @@ export function attach(
       context = {value: context};
     }
 
-    let owners: null | Array<SerializedElement> = null;
-    let owner = debugOwner;
-    while (owner != null) {
-      if (typeof owner.tag === 'number') {
-        const ownerFiber: Fiber = (owner: any); // Refined
-        if (owners === null) {
-          owners = [];
-        }
-        owners.push(fiberToSerializedElement(ownerFiber));
-        owner = ownerFiber._debugOwner;
-      } else {
-        // TODO: Track Server Component Owners.
-        break;
+    let owners = null;
+    if (_debugOwner) {
+      owners = [];
+      let owner = _debugOwner;
+      while (owner !== null) {
+        owners.push(fiberToSerializedElement(owner));
+        owner = owner._debugOwner || null;
       }
     }
 
@@ -3364,24 +3272,28 @@ export function attach(
 
     let hooks = null;
     if (usesHooks) {
-      const originalConsoleMethods: {[string]: $FlowFixMe} = {};
+      const originalConsoleMethods = {};
 
       // Temporarily disable all console logging before re-running the hook.
       for (const method in console) {
         try {
           originalConsoleMethods[method] = console[method];
-          // $FlowFixMe[prop-missing]
+          // $FlowFixMe property error|warn is not writable.
           console[method] = () => {};
         } catch (error) {}
       }
 
       try {
-        hooks = inspectHooksOfFiber(fiber, getDispatcherRef(renderer));
+        hooks = inspectHooksOfFiber(
+          fiber,
+          (renderer.currentDispatcherRef: any),
+          true, // Include source location info for hooks
+        );
       } finally {
         // Restore original console functionality.
         for (const method in originalConsoleMethods) {
           try {
-            // $FlowFixMe[prop-missing]
+            // $FlowFixMe property error|warn is not writable.
             console[method] = originalConsoleMethods[method];
           } catch (error) {}
         }
@@ -3401,21 +3313,16 @@ export function attach(
     const errors = fiberIDToErrorsMap.get(id) || new Map();
     const warnings = fiberIDToWarningsMap.get(id) || new Map();
 
-    let isErrored = false;
+    const isErrored =
+      (fiber.flags & DidCapture) !== NoFlags ||
+      forceErrorForFiberIDs.get(id) === true;
+
     let targetErrorBoundaryID;
     if (isErrorBoundary(fiber)) {
       // if the current inspected element is an error boundary,
       // either that we want to use it to toggle off error state
       // or that we allow to force error state on it if it's within another
       // error boundary
-      //
-      // TODO: This flag is a leaked implementation detail. Once we start
-      // releasing DevTools in lockstep with React, we should import a function
-      // from the reconciler instead.
-      const DidCapture = 0b000000000000000000010000000;
-      isErrored =
-        (fiber.flags & DidCapture) !== 0 ||
-        forceErrorForFiberIDs.get(id) === true;
       targetErrorBoundaryID = isErrored ? id : getNearestErrorBoundaryID(fiber);
     } else {
       targetErrorBoundaryID = getNearestErrorBoundaryID(fiber);
@@ -3426,14 +3333,9 @@ export function attach(
     };
 
     if (enableStyleXFeatures) {
-      if (memoizedProps != null && memoizedProps.hasOwnProperty('xstyle')) {
+      if (memoizedProps.hasOwnProperty('xstyle')) {
         plugins.stylex = getStyleXData(memoizedProps.xstyle);
       }
-    }
-
-    let source = null;
-    if (canViewSource) {
-      source = getSourceForFiber(fiber);
     }
 
     return {
@@ -3468,7 +3370,6 @@ export function attach(
 
       // Can view component source location.
       canViewSource,
-      source,
 
       // Does the component have legacy context attached to it.
       hasLegacyContext,
@@ -3489,6 +3390,9 @@ export function attach(
 
       // List of owners
       owners,
+
+      // Location of component in source code.
+      source: _debugSource || null,
 
       rootType,
       rendererPackageName: renderer.rendererPackageName,
@@ -3597,7 +3501,6 @@ export function attach(
       case IndeterminateComponent:
         global.$r = stateNode;
         break;
-      case IncompleteFunctionComponent:
       case FunctionComponent:
         global.$r = {
           hooks,
@@ -3648,17 +3551,14 @@ export function attach(
     }
   }
 
-  function getSerializedElementValueByPath(
-    id: number,
-    path: Array<string | number>,
-  ): ?string {
+  function copyElementPath(id: number, path: Array<string | number>): void {
     if (isMostRecentlyInspectedElement(id)) {
-      const valueToCopy = getInObject(
-        ((mostRecentlyInspectedElement: any): InspectedElement),
-        path,
+      copyToClipboard(
+        getInObject(
+          ((mostRecentlyInspectedElement: any): InspectedElement),
+          path,
+        ),
       );
-
-      return serializeToString(valueToCopy);
     }
   }
 
@@ -3791,22 +3691,18 @@ export function attach(
     // This will enable us to send patches without re-inspecting if hydrated paths are requested.
     // (Reducing how often we shallow-render is a better DX for function components that use hooks.)
     const cleanedInspectedElement = {...mostRecentlyInspectedElement};
-    // $FlowFixMe[prop-missing] found when upgrading Flow
     cleanedInspectedElement.context = cleanForBridge(
       cleanedInspectedElement.context,
       createIsPathAllowed('context', null),
     );
-    // $FlowFixMe[prop-missing] found when upgrading Flow
     cleanedInspectedElement.hooks = cleanForBridge(
       cleanedInspectedElement.hooks,
       createIsPathAllowed('hooks', 'hooks'),
     );
-    // $FlowFixMe[prop-missing] found when upgrading Flow
     cleanedInspectedElement.props = cleanForBridge(
       cleanedInspectedElement.props,
       createIsPathAllowed('props', null),
     );
-    // $FlowFixMe[prop-missing] found when upgrading Flow
     cleanedInspectedElement.state = cleanForBridge(
       cleanedInspectedElement.state,
       createIsPathAllowed('state', null),
@@ -3816,12 +3712,11 @@ export function attach(
       id,
       responseID: requestID,
       type: 'full-data',
-      // $FlowFixMe[prop-missing] found when upgrading Flow
       value: cleanedInspectedElement,
     };
   }
 
-  function logElementToConsole(id: number) {
+  function logElementToConsole(id) {
     const result = isMostRecentlyInspectedElementCurrent(id)
       ? mostRecentlyInspectedElement
       : inspectElementRaw(id);
@@ -3850,6 +3745,9 @@ export function attach(
     const nativeNodes = findNativeNodesForFiberID(id);
     if (nativeNodes !== null) {
       console.log('Nodes:', nativeNodes);
+    }
+    if (result.source !== null) {
+      console.log('Location:', result.source);
     }
     if (window.chrome || /firefox/i.test(navigator.userAgent)) {
       console.log(
@@ -4046,7 +3944,7 @@ export function attach(
     }
   }
 
-  type CommitProfilingData = {
+  type CommitProfilingData = {|
     changeDescriptions: Map<number, ChangeDescription> | null,
     commitTime: number,
     durations: Array<number>,
@@ -4055,7 +3953,7 @@ export function attach(
     passiveEffectDuration: number | null,
     priorityLevel: string | null,
     updaters: Array<SerializedElement> | null,
-  };
+  |};
 
   type CommitProfilingMetadataMap = Map<number, Array<CommitProfilingData>>;
   type DisplayNamesByRootID = Map<number, string>;
@@ -4068,8 +3966,7 @@ export function attach(
   let isProfiling: boolean = false;
   let profilingStartTime: number = 0;
   let recordChangeDescriptions: boolean = false;
-  let rootToCommitProfilingMetadataMap: CommitProfilingMetadataMap | null =
-    null;
+  let rootToCommitProfilingMetadataMap: CommitProfilingMetadataMap | null = null;
 
   function getProfilingData(): ProfilingDataBackend {
     const dataForRoots: Array<ProfilingDataForRootBackend> = [];
@@ -4254,9 +4151,9 @@ export function attach(
 
   // Map of id and its force error status: true (error), false (toggled off),
   // null (do nothing)
-  const forceErrorForFiberIDs = new Map<number | null, $FlowFixMe>();
+  const forceErrorForFiberIDs = new Map();
 
-  function shouldErrorFiberAccordingToMap(fiber: any) {
+  function shouldErrorFiberAccordingToMap(fiber) {
     if (typeof setErrorHandler !== 'function') {
       throw new Error(
         'Expected overrideError() to not get called for earlier React versions.',
@@ -4292,7 +4189,7 @@ export function attach(
     return status;
   }
 
-  function overrideError(id: number, forceError: boolean) {
+  function overrideError(id, forceError) {
     if (
       typeof setErrorHandler !== 'function' ||
       typeof scheduleUpdate !== 'function'
@@ -4319,14 +4216,14 @@ export function attach(
     return false;
   }
 
-  const forceFallbackForSuspenseIDs = new Set<number>();
+  const forceFallbackForSuspenseIDs = new Set();
 
-  function shouldSuspendFiberAccordingToSet(fiber: any) {
+  function shouldSuspendFiberAccordingToSet(fiber) {
     const maybeID = getFiberIDUnsafe(((fiber: any): Fiber));
     return maybeID !== null && forceFallbackForSuspenseIDs.has(maybeID);
   }
 
-  function overrideSuspense(id: number, forceFallback: boolean) {
+  function overrideSuspense(id, forceFallback) {
     if (
       typeof setSuspenseHandler !== 'function' ||
       typeof scheduleUpdate !== 'function'
@@ -4389,7 +4286,6 @@ export function attach(
     ) {
       // Is this the next Fiber we should select? Let's compare the frames.
       const actualFrame = getPathFrame(fiber);
-      // $FlowFixMe[incompatible-use] found when upgrading Flow
       const expectedFrame = trackedPath[trackedPathMatchDepth + 1];
       if (expectedFrame === undefined) {
         throw new Error('Expected to see a frame at the next depth.');
@@ -4403,7 +4299,6 @@ export function attach(
         trackedPathMatchFiber = fiber;
         trackedPathMatchDepth++;
         // Are we out of frames to match?
-        // $FlowFixMe[incompatible-use] found when upgrading Flow
         if (trackedPathMatchDepth === trackedPath.length - 1) {
           // There's nothing that can possibly match afterwards.
           // Don't check the children.
@@ -4424,9 +4319,7 @@ export function attach(
     return true;
   }
 
-  function updateTrackedPathStateAfterMount(
-    mightSiblingsBeOnTrackedPath: boolean,
-  ) {
+  function updateTrackedPathStateAfterMount(mightSiblingsBeOnTrackedPath) {
     // updateTrackedPathStateBeforeMount() told us whether to match siblings.
     // Now that we're entering siblings, let's use that information.
     mightBeOnTrackedPath = mightSiblingsBeOnTrackedPath;
@@ -4452,7 +4345,7 @@ export function attach(
     if (pseudoKey === undefined) {
       throw new Error('Expected root pseudo key to be known.');
     }
-    const name = pseudoKey.slice(0, pseudoKey.lastIndexOf(':'));
+    const name = pseudoKey.substring(0, pseudoKey.lastIndexOf(':'));
     const counter = rootDisplayNameCounter.get(name);
     if (counter === undefined) {
       throw new Error('Expected counter to be known.');
@@ -4528,15 +4421,13 @@ export function attach(
   // The return path will contain Fibers that are "invisible" to the store
   // because their keys and indexes are important to restoring the selection.
   function getPathForElement(id: number): Array<PathFrame> | null {
-    let fiber: ?Fiber = idToArbitraryFiberMap.get(id);
+    let fiber = idToArbitraryFiberMap.get(id);
     if (fiber == null) {
       return null;
     }
     const keyPath = [];
     while (fiber !== null) {
-      // $FlowFixMe[incompatible-call] found when upgrading Flow
       keyPath.push(getPathFrame(fiber));
-      // $FlowFixMe[incompatible-use] found when upgrading Flow
       fiber = fiber.return;
     }
     keyPath.reverse();
@@ -4553,7 +4444,7 @@ export function attach(
       return null;
     }
     // Find the closest Fiber store is aware of.
-    let fiber: null | Fiber = trackedPathMatchFiber;
+    let fiber = trackedPathMatchFiber;
     while (fiber !== null && shouldFilterFiber(fiber)) {
       fiber = fiber.return;
     }
@@ -4562,7 +4453,6 @@ export function attach(
     }
     return {
       id: getFiberIDThrows(fiber),
-      // $FlowFixMe[incompatible-use] found when upgrading Flow
       isFullMatch: trackedPathMatchDepth === trackedPath.length - 1,
     };
   }
@@ -4593,50 +4483,16 @@ export function attach(
     traceUpdatesEnabled = isEnabled;
   }
 
-  function hasFiberWithId(id: number): boolean {
-    return idToArbitraryFiberMap.has(id);
-  }
-
-  function getComponentStackForFiber(fiber: Fiber): string | null {
-    let componentStack = fiberToComponentStackMap.get(fiber);
-    if (componentStack == null) {
-      const dispatcherRef = getDispatcherRef(renderer);
-      if (dispatcherRef == null) {
-        return null;
-      }
-
-      componentStack = getStackByFiberInDevAndProd(
-        ReactTypeOfWork,
-        fiber,
-        dispatcherRef,
-      );
-      fiberToComponentStackMap.set(fiber, componentStack);
-    }
-
-    return componentStack;
-  }
-
-  function getSourceForFiber(fiber: Fiber): Source | null {
-    const componentStack = getComponentStackForFiber(fiber);
-    if (componentStack == null) {
-      return null;
-    }
-
-    return parseSourceFromComponentStack(componentStack);
-  }
-
   return {
     cleanup,
     clearErrorsAndWarnings,
     clearErrorsForFiberID,
     clearWarningsForFiberID,
-    getSerializedElementValueByPath,
+    copyElementPath,
     deletePath,
     findNativeNodesForFiberID,
     flushInitialOperations,
     getBestMatchForTrackedPath,
-    getComponentStackForFiber,
-    getSourceForFiber,
     getDisplayNameForFiberID,
     getFiberForNative,
     getFiberIDForNative,
@@ -4647,7 +4503,6 @@ export function attach(
     handleCommitFiberRoot,
     handleCommitFiberUnmount,
     handlePostCommitFiberRoot,
-    hasFiberWithId,
     inspectElement,
     logElementToConsole,
     patchConsoleForStrictMode,

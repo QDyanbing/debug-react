@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -9,20 +9,16 @@
 
 'use strict';
 
-let act;
-
 let React;
-let ReactDOMClient;
+let ReactDOM;
 
 describe('ReactPureComponent', () => {
   beforeEach(() => {
-    act = require('internal-test-utils').act;
-
     React = require('react');
-    ReactDOMClient = require('react-dom/client');
+    ReactDOM = require('react-dom');
   });
 
-  it('should render', async () => {
+  it('should render', () => {
     let renders = 0;
     class Component extends React.PureComponent {
       constructor() {
@@ -36,47 +32,36 @@ describe('ReactPureComponent', () => {
     }
 
     const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
     let text;
-    const componentRef = React.createRef();
+    let component;
 
     text = ['porcini'];
-    await act(() => {
-      root.render(<Component ref={componentRef} text={text} />);
-    });
+    component = ReactDOM.render(<Component text={text} />, container);
     expect(container.textContent).toBe('porcini');
     expect(renders).toBe(1);
 
     text = ['morel'];
-    await act(() => {
-      root.render(<Component ref={componentRef} text={text} />);
-    });
+    component = ReactDOM.render(<Component text={text} />, container);
     expect(container.textContent).toBe('morel');
     expect(renders).toBe(2);
 
     text[0] = 'portobello';
-    await act(() => {
-      root.render(<Component ref={componentRef} text={text} />);
-    });
+    component = ReactDOM.render(<Component text={text} />, container);
     expect(container.textContent).toBe('morel');
     expect(renders).toBe(2);
 
     // Setting state without changing it doesn't cause a rerender.
-    await act(() => {
-      componentRef.current.setState({type: 'mushrooms'});
-    });
+    component.setState({type: 'mushrooms'});
     expect(container.textContent).toBe('morel');
     expect(renders).toBe(2);
 
     // But changing state does.
-    await act(() => {
-      componentRef.current.setState({type: 'portobello mushrooms'});
-    });
+    component.setState({type: 'portobello mushrooms'});
     expect(container.textContent).toBe('portobello');
     expect(renders).toBe(3);
   });
 
-  it('can override shouldComponentUpdate', async () => {
+  it('can override shouldComponentUpdate', () => {
     let renders = 0;
     class Component extends React.PureComponent {
       render() {
@@ -89,24 +74,17 @@ describe('ReactPureComponent', () => {
     }
 
     const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    await expect(async () => {
-      await act(() => {
-        root.render(<Component />);
-      });
-    }).toErrorDev(
-      '' +
+    expect(() => ReactDOM.render(<Component />, container)).toErrorDev(
+      'Warning: ' +
         'Component has a method called shouldComponentUpdate(). ' +
         'shouldComponentUpdate should not be used when extending React.PureComponent. ' +
         'Please extend React.Component if shouldComponentUpdate is used.',
     );
-    await act(() => {
-      root.render(<Component />);
-    });
+    ReactDOM.render(<Component />, container);
     expect(renders).toBe(2);
   });
 
-  it('extends React.Component', async () => {
+  it('extends React.Component', () => {
     let renders = 0;
     class Component extends React.PureComponent {
       render() {
@@ -116,14 +94,11 @@ describe('ReactPureComponent', () => {
         return <div />;
       }
     }
-    const root = ReactDOMClient.createRoot(document.createElement('div'));
-    await act(() => {
-      root.render(<Component />);
-    });
+    ReactDOM.render(<Component />, document.createElement('div'));
     expect(renders).toBe(1);
   });
 
-  it('should warn when shouldComponentUpdate is defined on React.PureComponent', async () => {
+  it('should warn when shouldComponentUpdate is defined on React.PureComponent', () => {
     class PureComponent extends React.PureComponent {
       shouldComponentUpdate() {
         return true;
@@ -132,13 +107,9 @@ describe('ReactPureComponent', () => {
         return <div />;
       }
     }
-    const root = ReactDOMClient.createRoot(document.createElement('div'));
-    await expect(async () => {
-      await act(() => {
-        root.render(<PureComponent />);
-      });
-    }).toErrorDev(
-      '' +
+    const container = document.createElement('div');
+    expect(() => ReactDOM.render(<PureComponent />, container)).toErrorDev(
+      'Warning: ' +
         'PureComponent has a method called shouldComponentUpdate(). ' +
         'shouldComponentUpdate should not be used when extending React.PureComponent. ' +
         'Please extend React.Component if shouldComponentUpdate is used.',

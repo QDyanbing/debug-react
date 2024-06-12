@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -12,14 +12,11 @@
 const React = require('react');
 const PropTypes = require('prop-types');
 const ReactDOM = require('react-dom');
-const ReactDOMClient = require('react-dom/client');
-const act = require('internal-test-utils').act;
-const renderSubtreeIntoContainer =
-  require('react-dom').unstable_renderSubtreeIntoContainer;
+const ReactTestUtils = require('react-dom/test-utils');
+const renderSubtreeIntoContainer = require('react-dom')
+  .unstable_renderSubtreeIntoContainer;
 
 describe('renderSubtreeIntoContainer', () => {
-  // @gate !disableLegacyContext
-  // @gate !disableLegacyMode
   it('should pass context when rendering subtree elsewhere', () => {
     const portal = document.createElement('div');
 
@@ -50,23 +47,59 @@ describe('renderSubtreeIntoContainer', () => {
 
       componentDidMount() {
         expect(
-          function () {
+          function() {
             renderSubtreeIntoContainer(this, <Component />, portal);
           }.bind(this),
         ).toErrorDev(
-          'ReactDOM.unstable_renderSubtreeIntoContainer() has not been supported since React 18',
+          'ReactDOM.unstable_renderSubtreeIntoContainer() is no longer supported',
         );
       }
     }
 
-    const container = document.createElement('div');
-    ReactDOM.render(<Parent />, container);
+    ReactTestUtils.renderIntoDocument(<Parent />);
     expect(portal.firstChild.innerHTML).toBe('bar');
   });
 
-  // @gate !disableLegacyContext
-  // @gate !disableLegacyMode
-  it('should update context if it changes due to setState', async () => {
+  it('should throw if parentComponent is invalid', () => {
+    const portal = document.createElement('div');
+
+    class Component extends React.Component {
+      static contextTypes = {
+        foo: PropTypes.string.isRequired,
+      };
+
+      render() {
+        return <div>{this.context.foo}</div>;
+      }
+    }
+
+    // ESLint is confused here and thinks Parent is unused, presumably because
+    // it is only used inside of the class body?
+    // eslint-disable-next-line no-unused-vars
+    class Parent extends React.Component {
+      static childContextTypes = {
+        foo: PropTypes.string.isRequired,
+      };
+
+      getChildContext() {
+        return {
+          foo: 'bar',
+        };
+      }
+
+      render() {
+        return null;
+      }
+
+      componentDidMount() {
+        expect(function() {
+          renderSubtreeIntoContainer(<Parent />, <Component />, portal);
+        }).toThrowError('parentComponentmust be a valid React Component');
+      }
+    }
+  });
+
+  it('should update context if it changes due to setState', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const portal = document.createElement('div');
@@ -107,7 +140,7 @@ describe('renderSubtreeIntoContainer', () => {
         expect(() => {
           renderSubtreeIntoContainer(this, <Component />, portal);
         }).toErrorDev(
-          'ReactDOM.unstable_renderSubtreeIntoContainer() has not been supported since React 18',
+          'ReactDOM.unstable_renderSubtreeIntoContainer() is no longer supported',
         );
       }
 
@@ -115,27 +148,18 @@ describe('renderSubtreeIntoContainer', () => {
         expect(() => {
           renderSubtreeIntoContainer(this, <Component />, portal);
         }).toErrorDev(
-          'ReactDOM.unstable_renderSubtreeIntoContainer() has not been supported since React 18',
+          'ReactDOM.unstable_renderSubtreeIntoContainer() is no longer supported',
         );
       }
     }
-    const root = ReactDOMClient.createRoot(container);
-    const parentRef = React.createRef();
-    await act(async () => {
-      root.render(<Parent ref={parentRef} />);
-    });
-    const instance = parentRef.current;
 
+    const instance = ReactDOM.render(<Parent />, container);
     expect(portal.firstChild.innerHTML).toBe('initial-initial');
-    await act(async () => {
-      instance.setState({bar: 'changed'});
-    });
+    instance.setState({bar: 'changed'});
     expect(portal.firstChild.innerHTML).toBe('changed-changed');
   });
 
-  // @gate !disableLegacyContext
-  // @gate !disableLegacyMode
-  it('should update context if it changes due to re-render', async () => {
+  it('should update context if it changes due to re-render', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const portal = document.createElement('div');
@@ -172,7 +196,7 @@ describe('renderSubtreeIntoContainer', () => {
         expect(() => {
           renderSubtreeIntoContainer(this, <Component />, portal);
         }).toErrorDev(
-          'ReactDOM.unstable_renderSubtreeIntoContainer() has not been supported since React 18',
+          'ReactDOM.unstable_renderSubtreeIntoContainer() is no longer supported',
         );
       }
 
@@ -180,24 +204,18 @@ describe('renderSubtreeIntoContainer', () => {
         expect(() => {
           renderSubtreeIntoContainer(this, <Component />, portal);
         }).toErrorDev(
-          'ReactDOM.unstable_renderSubtreeIntoContainer() has not been supported since React 18',
+          'ReactDOM.unstable_renderSubtreeIntoContainer() is no longer supported',
         );
       }
     }
 
-    const root = ReactDOMClient.createRoot(container);
-    await act(async () => {
-      root.render(<Parent bar="initial" />);
-    });
+    ReactDOM.render(<Parent bar="initial" />, container);
     expect(portal.firstChild.innerHTML).toBe('initial-initial');
-    await act(async () => {
-      root.render(<Parent bar="changed" />);
-    });
+    ReactDOM.render(<Parent bar="changed" />, container);
     expect(portal.firstChild.innerHTML).toBe('changed-changed');
   });
 
-  // @gate !disableLegacyMode
-  it('should render portal with non-context-provider parent', async () => {
+  it('should render portal with non-context-provider parent', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const portal = document.createElement('div');
@@ -211,21 +229,16 @@ describe('renderSubtreeIntoContainer', () => {
         expect(() => {
           renderSubtreeIntoContainer(this, <div>hello</div>, portal);
         }).toErrorDev(
-          'ReactDOM.unstable_renderSubtreeIntoContainer() has not been supported since React 18',
+          'ReactDOM.unstable_renderSubtreeIntoContainer() is no longer supported',
         );
       }
     }
 
-    const root = ReactDOMClient.createRoot(container);
-    await act(async () => {
-      root.render(<Parent bar="initial" />);
-    });
+    ReactDOM.render(<Parent bar="initial" />, container);
     expect(portal.firstChild.innerHTML).toBe('hello');
   });
 
-  // @gate !disableLegacyContext
-  // @gate !disableLegacyMode
-  it('should get context through non-context-provider parent', async () => {
+  it('should get context through non-context-provider parent', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const portal = document.createElement('div');
@@ -250,7 +263,7 @@ describe('renderSubtreeIntoContainer', () => {
         expect(() => {
           renderSubtreeIntoContainer(this, <Child />, portal);
         }).toErrorDev(
-          'ReactDOM.unstable_renderSubtreeIntoContainer() has not been supported since React 18',
+          'ReactDOM.unstable_renderSubtreeIntoContainer() is no longer supported',
         );
       }
     }
@@ -264,16 +277,11 @@ describe('renderSubtreeIntoContainer', () => {
       }
     }
 
-    const root = ReactDOMClient.createRoot(container);
-    await act(async () => {
-      root.render(<Parent value="foo" />);
-    });
+    ReactDOM.render(<Parent value="foo" />, container);
     expect(portal.textContent).toBe('foo');
   });
 
-  // @gate !disableLegacyContext
-  // @gate !disableLegacyMode
-  it('should get context through middle non-context-provider layer', async () => {
+  it('should get context through middle non-context-provider layer', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const portal1 = document.createElement('div');
@@ -290,7 +298,7 @@ describe('renderSubtreeIntoContainer', () => {
         expect(() => {
           renderSubtreeIntoContainer(this, <Middle />, portal1);
         }).toErrorDev(
-          'ReactDOM.unstable_renderSubtreeIntoContainer() has not been supported since React 18',
+          'ReactDOM.unstable_renderSubtreeIntoContainer() is no longer supported',
         );
       }
       static childContextTypes = {
@@ -306,7 +314,7 @@ describe('renderSubtreeIntoContainer', () => {
         expect(() => {
           renderSubtreeIntoContainer(this, <Child />, portal2);
         }).toErrorDev(
-          'ReactDOM.unstable_renderSubtreeIntoContainer() has not been supported since React 18',
+          'ReactDOM.unstable_renderSubtreeIntoContainer() is no longer supported',
         );
       }
     }
@@ -320,15 +328,11 @@ describe('renderSubtreeIntoContainer', () => {
       }
     }
 
-    const root = ReactDOMClient.createRoot(container);
-    await act(async () => {
-      root.render(<Parent value="foo" />);
-    });
+    ReactDOM.render(<Parent value="foo" />, container);
     expect(portal2.textContent).toBe('foo');
   });
 
-  // @gate !disableLegacyMode
-  it('legacy test: fails gracefully when mixing React 15 and 16', () => {
+  it('fails gracefully when mixing React 15 and 16', () => {
     class C extends React.Component {
       render() {
         return <div />;

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -76,7 +76,7 @@ describe('SchedulerDOMSetImmediate', () => {
     };
 
     // Unused: we expect setImmediate to be preferred.
-    global.MessageChannel = function () {
+    global.MessageChannel = function() {
       return {
         port1: {},
         port2: {
@@ -88,7 +88,7 @@ describe('SchedulerDOMSetImmediate', () => {
     };
 
     let pendingSetImmediateCallback = null;
-    global.setImmediate = function (cb) {
+    global.setImmediate = function(cb) {
       if (pendingSetImmediateCallback) {
         throw Error('Message event already scheduled');
       }
@@ -173,7 +173,7 @@ describe('SchedulerDOMSetImmediate', () => {
     runtime.assertLog([
       'setImmediate Callback',
       'Task',
-      gate(flags => (flags.www ? 'Yield at 10ms' : 'Yield at 5ms')),
+      'Yield at 5ms',
       'Set Immediate',
     ]);
 
@@ -288,7 +288,7 @@ describe('SchedulerDOMSetImmediate', () => {
   });
 });
 
-test('does not crash if setImmediate is undefined', () => {
+it('does not crash if setImmediate is undefined', () => {
   jest.resetModules();
   const originalSetImmediate = global.setImmediate;
   try {

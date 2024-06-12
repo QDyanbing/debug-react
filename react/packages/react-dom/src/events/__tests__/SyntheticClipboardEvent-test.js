@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -10,16 +10,14 @@
 'use strict';
 
 let React;
-let ReactDOMClient;
-let act;
+let ReactDOM;
 
 describe('SyntheticClipboardEvent', () => {
   let container;
 
   beforeEach(() => {
     React = require('react');
-    ReactDOMClient = require('react-dom/client');
-    act = require('internal-test-utils').act;
+    ReactDOM = require('react-dom');
 
     // The container has to be attached for events to fire.
     container = document.createElement('div');
@@ -34,7 +32,7 @@ describe('SyntheticClipboardEvent', () => {
   describe('ClipboardEvent interface', () => {
     describe('clipboardData', () => {
       describe('when event has clipboardData', () => {
-        it("returns event's clipboardData", async () => {
+        it("returns event's clipboardData", () => {
           let expectedCount = 0;
 
           // Mock clipboardData since jsdom implementation doesn't have a constructor
@@ -49,39 +47,30 @@ describe('SyntheticClipboardEvent', () => {
             expect(event.clipboardData).toBe(clipboardData);
             expectedCount++;
           };
-          const root = ReactDOMClient.createRoot(container);
-          await act(() => {
-            root.render(
-              <div
-                onCopy={eventHandler}
-                onCut={eventHandler}
-                onPaste={eventHandler}
-              />,
-            );
-          });
-
-          const div = container.firstChild;
+          const div = ReactDOM.render(
+            <div
+              onCopy={eventHandler}
+              onCut={eventHandler}
+              onPaste={eventHandler}
+            />,
+            container,
+          );
 
           let event;
           event = document.createEvent('Event');
           event.initEvent('copy', true, true);
           event.clipboardData = clipboardData;
-          await act(() => {
-            div.dispatchEvent(event);
-          });
+          div.dispatchEvent(event);
+
           event = document.createEvent('Event');
           event.initEvent('cut', true, true);
           event.clipboardData = clipboardData;
-          await act(() => {
-            div.dispatchEvent(event);
-          });
+          div.dispatchEvent(event);
 
           event = document.createEvent('Event');
           event.initEvent('paste', true, true);
           event.clipboardData = clipboardData;
-          await act(() => {
-            div.dispatchEvent(event);
-          });
+          div.dispatchEvent(event);
 
           expect(expectedCount).toBe(3);
         });
@@ -90,7 +79,7 @@ describe('SyntheticClipboardEvent', () => {
   });
 
   describe('EventInterface', () => {
-    it('is able to `preventDefault` and `stopPropagation`', async () => {
+    it('is able to `preventDefault` and `stopPropagation`', () => {
       let expectedCount = 0;
 
       const eventHandler = event => {
@@ -103,19 +92,14 @@ describe('SyntheticClipboardEvent', () => {
         expectedCount++;
       };
 
-      const root = ReactDOMClient.createRoot(container);
-
-      await act(() => {
-        root.render(
-          <div
-            onCopy={eventHandler}
-            onCut={eventHandler}
-            onPaste={eventHandler}
-          />,
-        );
-      });
-
-      const div = container.firstChild;
+      const div = ReactDOM.render(
+        <div
+          onCopy={eventHandler}
+          onCut={eventHandler}
+          onPaste={eventHandler}
+        />,
+        container,
+      );
 
       let event;
       event = document.createEvent('Event');

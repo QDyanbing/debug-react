@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -45,7 +45,7 @@ export class SnapshotsView extends View {
     this._profilerData = profilerData;
   }
 
-  desiredSize(): Size {
+  desiredSize() {
     return this._intrinsicSize;
   }
 
@@ -166,7 +166,7 @@ export class SnapshotsView extends View {
       imageRect.size.height,
     );
 
-    // $FlowFixMe[incompatible-call] Flow doesn't know about the 9 argument variant of drawImage()
+    // $FlowFixMe Flow doesn't know about the 9 argument variant of drawImage()
     context.drawImage(
       snapshot.image,
 

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,71 +7,19 @@
  * @flow
  */
 
-import semver from 'semver';
-
 import typeof ReactTestRenderer from 'react-test-renderer';
 
 import type {FrontendBridge} from 'react-devtools-shared/src/bridge';
 import type Store from 'react-devtools-shared/src/devtools/store';
 import type {ProfilingDataFrontend} from 'react-devtools-shared/src/devtools/views/Profiler/types';
-import type {ElementType} from 'react-devtools-shared/src/frontend/types';
-import type {Node as ReactNode} from 'react';
-
-import {ReactVersion} from '../../../../ReactVersions';
-
-const requestedReactVersion = process.env.REACT_VERSION || ReactVersion;
-export function getActDOMImplementation(): () => void | Promise<void> {
-  // This is for React < 17, where act wasn't shipped yet.
-  if (semver.lt(requestedReactVersion, '17.0.0')) {
-    require('react-dom/test-utils');
-    return cb => cb();
-  }
-
-  // This is for React < 18, where act was distributed in react-dom/test-utils.
-  if (semver.lt(requestedReactVersion, '18.0.0')) {
-    const ReactDOMTestUtils = require('react-dom/test-utils');
-    return ReactDOMTestUtils.act;
-  }
-
-  const React = require('react');
-  // This is for React 18, where act was distributed in react as unstable.
-  if (React.unstable_act) {
-    return React.unstable_act;
-  }
-
-  // This is for React > 18, where act is marked as stable.
-  if (React.act) {
-    return React.act;
-  }
-
-  throw new Error("Couldn't find any available act implementation");
-}
-
-export function getActTestRendererImplementation(): () => void | Promise<void> {
-  // This is for React < 17, where act wasn't shipped yet.
-  if (semver.lt(requestedReactVersion, '17.0.0')) {
-    require('react-test-renderer');
-    return cb => cb();
-  }
-
-  const RTR = require('react-test-renderer');
-  if (RTR.act) {
-    return RTR.act;
-  }
-
-  throw new Error(
-    "Couldn't find any available act implementation in react-test-renderer",
-  );
-}
+import type {ElementType} from 'react-devtools-shared/src/types';
 
 export function act(
   callback: Function,
   recursivelyFlush: boolean = true,
 ): void {
-  // act from react-test-renderer has some side effects on React DevTools
-  // it injects the renderer for DevTools, see ReactTestRenderer.js
-  const actTestRenderer = getActTestRendererImplementation();
-  const actDOM = getActDOMImplementation();
+  const {act: actTestRenderer} = require('react-test-renderer');
+  const {act: actDOM} = require('react-dom/test-utils');
 
   actDOM(() => {
     actTestRenderer(() => {
@@ -95,11 +43,10 @@ export async function actAsync(
   cb: () => *,
   recursivelyFlush: boolean = true,
 ): Promise<void> {
-  // act from react-test-renderer has some side effects on React DevTools
-  // it injects the renderer for DevTools, see ReactTestRenderer.js
-  const actTestRenderer = getActTestRendererImplementation();
-  const actDOM = getActDOMImplementation();
+  const {act: actTestRenderer} = require('react-test-renderer');
+  const {act: actDOM} = require('react-dom/test-utils');
 
+  // $FlowFixMe Flow doesn't know about "await act()" yet
   await actDOM(async () => {
     await actTestRenderer(async () => {
       await cb();
@@ -108,6 +55,7 @@ export async function actAsync(
 
   if (recursivelyFlush) {
     while (jest.getTimerCount() > 0) {
+      // $FlowFixMe Flow doesn't know about "await act()" yet
       await actDOM(async () => {
         await actTestRenderer(async () => {
           jest.runAllTimers();
@@ -115,6 +63,7 @@ export async function actAsync(
       });
     }
   } else {
+    // $FlowFixMe Flow doesn't know about "await act()" yet
     await actDOM(async () => {
       await actTestRenderer(async () => {
         jest.runOnlyPendingTimers();
@@ -122,126 +71,6 @@ export async function actAsync(
     });
   }
 }
-
-type RenderImplementation = {
-  render: (elements: ?ReactNode) => () => void,
-  unmount: () => void,
-  createContainer: () => void,
-  getContainer: () => ?HTMLElement,
-};
-
-export function getLegacyRenderImplementation(): RenderImplementation {
-  let ReactDOM;
-  let container;
-  const containersToRemove = [];
-
-  beforeEach(() => {
-    ReactDOM = require('react-dom');
-
-    createContainer();
-  });
-
-  afterEach(() => {
-    containersToRemove.forEach(c => document.body.removeChild(c));
-    containersToRemove.splice(0, containersToRemove.length);
-
-    ReactDOM = null;
-    container = null;
-  });
-
-  function render(elements) {
-    withErrorsOrWarningsIgnored(
-      ['ReactDOM.render has not been supported since React 18'],
-      () => {
-        ReactDOM.render(elements, container);
-      },
-    );
-
-    return unmount;
-  }
-
-  function unmount() {
-    ReactDOM.unmountComponentAtNode(container);
-  }
-
-  function createContainer() {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-
-    containersToRemove.push(container);
-  }
-
-  function getContainer() {
-    return container;
-  }
-
-  return {
-    render,
-    unmount,
-    createContainer,
-    getContainer,
-  };
-}
-
-export function getModernRenderImplementation(): RenderImplementation {
-  let ReactDOMClient;
-  let container;
-  let root;
-  const containersToRemove = [];
-
-  beforeEach(() => {
-    ReactDOMClient = require('react-dom/client');
-
-    createContainer();
-  });
-
-  afterEach(() => {
-    containersToRemove.forEach(c => document.body.removeChild(c));
-    containersToRemove.splice(0, containersToRemove.length);
-
-    ReactDOMClient = null;
-    container = null;
-    root = null;
-  });
-
-  function render(elements) {
-    if (root == null) {
-      root = ReactDOMClient.createRoot(container);
-    }
-    root.render(elements);
-
-    return unmount;
-  }
-
-  function unmount() {
-    root.unmount();
-  }
-
-  function createContainer() {
-    container = document.createElement('div');
-    document.body.appendChild(container);
-
-    root = null;
-
-    containersToRemove.push(container);
-  }
-
-  function getContainer() {
-    return container;
-  }
-
-  return {
-    render,
-    unmount,
-    createContainer,
-    getContainer,
-  };
-}
-
-export const getVersionedRenderImplementation: () => RenderImplementation =
-  semver.lt(requestedReactVersion, '18.0.0')
-    ? getLegacyRenderImplementation
-    : getModernRenderImplementation;
 
 export function beforeEachProfiling(): void {
   // Mock React's timing information so that test runs are predictable.
@@ -260,7 +89,7 @@ export function createDisplayNameFilter(
   source: string,
   isEnabled: boolean = true,
 ) {
-  const Types = require('react-devtools-shared/src/frontend/types');
+  const Types = require('react-devtools-shared/src/types');
   let isValid = true;
   try {
     new RegExp(source); // eslint-disable-line no-new
@@ -276,7 +105,7 @@ export function createDisplayNameFilter(
 }
 
 export function createHOCFilter(isEnabled: boolean = true) {
-  const Types = require('react-devtools-shared/src/frontend/types');
+  const Types = require('react-devtools-shared/src/types');
   return {
     type: Types.ComponentFilterHOC,
     isEnabled,
@@ -288,7 +117,7 @@ export function createElementTypeFilter(
   elementType: ElementType,
   isEnabled: boolean = true,
 ) {
-  const Types = require('react-devtools-shared/src/frontend/types');
+  const Types = require('react-devtools-shared/src/types');
   return {
     type: Types.ComponentFilterElementType,
     isEnabled,
@@ -300,7 +129,7 @@ export function createLocationFilter(
   source: string,
   isEnabled: boolean = true,
 ) {
-  const Types = require('react-devtools-shared/src/frontend/types');
+  const Types = require('react-devtools-shared/src/types');
   let isValid = true;
   try {
     new RegExp(source); // eslint-disable-line no-new
@@ -326,7 +155,7 @@ export function getRendererID(): number {
     return rendererInterface.renderer.rendererPackageName === 'react-dom';
   });
 
-  if (id == null) {
+  if (ids == null) {
     throw Error('Could not find renderer.');
   }
 
@@ -340,7 +169,7 @@ export function legacyRender(elements, container) {
 
   const ReactDOM = require('react-dom');
   withErrorsOrWarningsIgnored(
-    ['ReactDOM.render has not been supported since React 18'],
+    ['ReactDOM.render is no longer supported in React 18'],
     () => {
       ReactDOM.render(elements, container);
     },
@@ -374,8 +203,7 @@ export function exportImportHelper(bridge: FrontendBridge, store: Store): void {
 
   expect(profilerStore.profilingData).not.toBeNull();
 
-  const profilingDataFrontendInitial =
-    ((profilerStore.profilingData: any): ProfilingDataFrontend);
+  const profilingDataFrontendInitial = ((profilerStore.profilingData: any): ProfilingDataFrontend);
   expect(profilingDataFrontendInitial.imported).toBe(false);
 
   const profilingDataExport = prepareProfilingDataExport(
@@ -459,21 +287,5 @@ export function overrideFeatureFlags(overrideFlags) {
       ...actualFlags,
       ...overrideFlags,
     };
-  });
-}
-
-export function normalizeCodeLocInfo(str) {
-  if (typeof str !== 'string') {
-    return str;
-  }
-  // This special case exists only for the special source location in
-  // ReactElementValidator. That will go away if we remove source locations.
-  str = str.replace(/Check your code at .+?:\d+/g, 'Check your code at **');
-  // V8 format:
-  //  at Component (/path/filename.js:123:45)
-  // React format:
-  //    in Component (at filename.js:123)
-  return str.replace(/\n +(?:at|in) ([\S]+)[^\n]*/g, function (m, name) {
-    return '\n    in ' + name + ' (at **)';
   });
 }

@@ -1,15 +1,15 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
 
 import {REACT_ELEMENT_TYPE, REACT_FRAGMENT_TYPE} from 'shared/ReactSymbols';
-import {disableStringRefs, enableRefAsProp} from 'shared/ReactFeatureFlags';
-const {assertConsoleLogsCleared} = require('internal-test-utils/consoleMock');
 
 import isArray from 'shared/isArray';
+
+export {act} from './internalAct';
 
 function captureAssertion(fn) {
   // Trick to use a Jest matcher inside another Jest matcher. `fn` contains an
@@ -29,51 +29,12 @@ function captureAssertion(fn) {
 
 function assertYieldsWereCleared(root) {
   const Scheduler = root._Scheduler;
-  const actualYields = Scheduler.unstable_clearLog();
+  const actualYields = Scheduler.unstable_clearYields();
   if (actualYields.length !== 0) {
-    const error = Error(
+    throw new Error(
       'Log of yielded values is not empty. ' +
         'Call expect(ReactTestRenderer).unstable_toHaveYielded(...) first.',
     );
-    Error.captureStackTrace(error, assertYieldsWereCleared);
-    throw error;
-  }
-  assertConsoleLogsCleared();
-}
-
-function createJSXElementForTestComparison(type, props) {
-  if (__DEV__ && enableRefAsProp) {
-    const element = {
-      $$typeof: REACT_ELEMENT_TYPE,
-      type: type,
-      key: null,
-      props: props,
-      _owner: null,
-      _store: __DEV__ ? {} : undefined,
-    };
-    Object.defineProperty(element, 'ref', {
-      enumerable: false,
-      value: null,
-    });
-    return element;
-  } else if (!__DEV__ && disableStringRefs) {
-    return {
-      $$typeof: REACT_ELEMENT_TYPE,
-      type: type,
-      key: null,
-      ref: null,
-      props: props,
-    };
-  } else {
-    return {
-      $$typeof: REACT_ELEMENT_TYPE,
-      type: type,
-      key: null,
-      ref: null,
-      props: props,
-      _owner: null,
-      _store: __DEV__ ? {} : undefined,
-    };
   }
 }
 
@@ -94,9 +55,17 @@ export function unstable_toMatchRenderedOutput(root, expectedJSX) {
       if (actualJSXChildren === null || typeof actualJSXChildren === 'string') {
         actualJSX = actualJSXChildren;
       } else {
-        actualJSX = createJSXElementForTestComparison(REACT_FRAGMENT_TYPE, {
-          children: actualJSXChildren,
-        });
+        actualJSX = {
+          $$typeof: REACT_ELEMENT_TYPE,
+          type: REACT_FRAGMENT_TYPE,
+          key: null,
+          ref: null,
+          props: {
+            children: actualJSXChildren,
+          },
+          _owner: null,
+          _store: __DEV__ ? {} : undefined,
+        };
       }
     }
   } else {
@@ -113,12 +82,18 @@ function jsonChildToJSXChild(jsonChild) {
     return jsonChild;
   } else {
     const jsxChildren = jsonChildrenToJSXChildren(jsonChild.children);
-    return createJSXElementForTestComparison(
-      jsonChild.type,
-      jsxChildren === null
-        ? jsonChild.props
-        : {...jsonChild.props, children: jsxChildren},
-    );
+    return {
+      $$typeof: REACT_ELEMENT_TYPE,
+      type: jsonChild.type,
+      key: null,
+      ref: null,
+      props:
+        jsxChildren === null
+          ? jsonChild.props
+          : {...jsonChild.props, children: jsxChildren},
+      _owner: null,
+      _store: __DEV__ ? {} : undefined,
+    };
   }
 }
 

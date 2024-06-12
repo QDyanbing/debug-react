@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -12,32 +12,39 @@
 const ReactDOMServerIntegrationUtils = require('./utils/ReactDOMServerIntegrationTestUtils');
 
 let React;
-let ReactDOMClient;
+let ReactDOM;
 let ReactDOMServer;
+let ReactTestUtils;
+
+function initModules() {
+  // Reset warning cache.
+  jest.resetModuleRegistry();
+
+  React = require('react');
+  ReactDOM = require('react-dom');
+  ReactDOMServer = require('react-dom/server');
+  ReactTestUtils = require('react-dom/test-utils');
+
+  // Make them available to the helpers.
+  return {
+    ReactDOM,
+    ReactDOMServer,
+    ReactTestUtils,
+  };
+}
+
+const {
+  resetModules,
+  expectMarkupMismatch,
+  expectMarkupMatch,
+} = ReactDOMServerIntegrationUtils(initModules);
 
 describe('ReactDOMServerIntegration', () => {
-  function initModules() {
-    // Reset warning cache.
-    jest.resetModules();
-
-    React = require('react');
-    ReactDOMClient = require('react-dom/client');
-    ReactDOMServer = require('react-dom/server');
-
-    // Make them available to the helpers.
-    return {
-      ReactDOMClient,
-      ReactDOMServer,
-    };
-  }
-
-  const {resetModules, expectMarkupMismatch, expectMarkupMatch} =
-    ReactDOMServerIntegrationUtils(initModules);
   beforeEach(() => {
     resetModules();
   });
 
-  describe('reconnecting to server markup', function () {
+  describe('reconnecting to server markup', function() {
     let EmptyComponent;
     beforeEach(() => {
       EmptyComponent = class extends React.Component {
@@ -47,8 +54,8 @@ describe('ReactDOMServerIntegration', () => {
       };
     });
 
-    describe('elements', function () {
-      describe('reconnecting different component implementations', function () {
+    describe('elements', function() {
+      describe('reconnecting different component implementations', function() {
         let ES6ClassComponent, PureComponent, bareElement;
         beforeEach(() => {
           // try each type of component on client and server.
@@ -119,8 +126,8 @@ describe('ReactDOMServerIntegration', () => {
       it('should error reconnecting different attribute values', () =>
         expectMarkupMismatch(<div id="foo" />, <div id="bar" />));
 
-      it('should error reconnecting different element types of children', () =>
-        expectMarkupMismatch(
+      it('can explicitly ignore errors reconnecting different element types of children', () =>
+        expectMarkupMatch(
           <div>
             <div />
           </div>,
@@ -158,7 +165,7 @@ describe('ReactDOMServerIntegration', () => {
         ));
     });
 
-    describe('inline styles', function () {
+    describe('inline styles', function() {
       it('should error reconnecting missing style attribute', () =>
         expectMarkupMismatch(<div style={{width: '1px'}} />, <div />));
 
@@ -208,7 +215,7 @@ describe('ReactDOMServerIntegration', () => {
         ));
     });
 
-    describe('text nodes', function () {
+    describe('text nodes', function() {
       it('should error reconnecting different text', () =>
         expectMarkupMismatch(<div>Text</div>, <div>Other Text</div>));
 
@@ -252,7 +259,7 @@ describe('ReactDOMServerIntegration', () => {
         ));
     });
 
-    describe('element trees and children', function () {
+    describe('element trees and children', function() {
       it('should error reconnecting missing children', () =>
         expectMarkupMismatch(
           <div>
@@ -350,8 +357,8 @@ describe('ReactDOMServerIntegration', () => {
           <div>{''}</div>,
         ));
 
-      it('can not ignore reconnecting more children', () =>
-        expectMarkupMismatch(
+      it('can explicitly ignore reconnecting more children', () =>
+        expectMarkupMatch(
           <div>
             <div />
           </div>,
@@ -361,8 +368,8 @@ describe('ReactDOMServerIntegration', () => {
           </div>,
         ));
 
-      it('can not ignore reconnecting fewer children', () =>
-        expectMarkupMismatch(
+      it('can explicitly ignore reconnecting fewer children', () =>
+        expectMarkupMatch(
           <div>
             <div />
             <div />
@@ -372,8 +379,8 @@ describe('ReactDOMServerIntegration', () => {
           </div>,
         ));
 
-      it('can not ignore reconnecting reordered children', () =>
-        expectMarkupMismatch(
+      it('can explicitly ignore reconnecting reordered children', () =>
+        expectMarkupMatch(
           <div suppressHydrationWarning={true}>
             <div />
             <span />

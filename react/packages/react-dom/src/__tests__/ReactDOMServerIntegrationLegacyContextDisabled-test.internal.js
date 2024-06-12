@@ -1,11 +1,10 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
  * @emails react-core
- * @jest-environment ./scripts/jest/ReactDOMServerIntegrationEnvironment
  */
 
 'use strict';
@@ -13,29 +12,31 @@
 const ReactDOMServerIntegrationUtils = require('./utils/ReactDOMServerIntegrationTestUtils');
 
 let React;
-let ReactDOMClient;
+let ReactDOM;
 let ReactFeatureFlags;
 let ReactDOMServer;
+let ReactTestUtils;
 
 function initModules() {
   // Reset warning cache.
-  jest.resetModules();
+  jest.resetModuleRegistry();
   React = require('react');
-  ReactDOMClient = require('react-dom/client');
+  ReactDOM = require('react-dom');
   ReactDOMServer = require('react-dom/server');
+  ReactTestUtils = require('react-dom/test-utils');
 
   ReactFeatureFlags = require('shared/ReactFeatureFlags');
   ReactFeatureFlags.disableLegacyContext = true;
 
   // Make them available to the helpers.
   return {
-    ReactDOMClient,
+    ReactDOM,
     ReactDOMServer,
+    ReactTestUtils,
   };
 }
 
-const {resetModules, itRenders, clientRenderOnBadMarkup} =
-  ReactDOMServerIntegrationUtils(initModules);
+const {resetModules, itRenders} = ReactDOMServerIntegrationUtils(initModules);
 
 function formatValue(val) {
   if (val === null) {
@@ -105,7 +106,7 @@ describe('ReactDOMServerIntegrationLegacyContextDisabled', () => {
           <RegularFn />
         </span>
       </LegacyProvider>,
-      render === clientRenderOnBadMarkup ? 4 : 3,
+      3,
     );
     expect(e.textContent).toBe('{}undefinedundefined');
     expect(lifecycleContextLog).toEqual([]);

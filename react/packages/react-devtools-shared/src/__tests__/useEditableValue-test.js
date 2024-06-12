@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,23 +7,21 @@
  * @flow
  */
 
-import {getVersionedRenderImplementation} from './utils';
-
 describe('useEditableValue', () => {
   let act;
   let React;
+  let legacyRender;
   let useEditableValue;
 
   beforeEach(() => {
     const utils = require('./utils');
     act = utils.act;
+    legacyRender = utils.legacyRender;
 
     React = require('react');
 
     useEditableValue = require('../devtools/views/hooks').useEditableValue;
   });
-
-  const {render} = getVersionedRenderImplementation();
 
   it('should not cause a loop with values like NaN', () => {
     let state;
@@ -34,8 +32,8 @@ describe('useEditableValue', () => {
       return null;
     }
 
-    act(() => render(<Example />));
-
+    const container = document.createElement('div');
+    legacyRender(<Example />, container);
     expect(state.editableValue).toEqual('NaN');
     expect(state.externalValue).toEqual(NaN);
     expect(state.parsedValue).toEqual(NaN);
@@ -52,8 +50,8 @@ describe('useEditableValue', () => {
       return null;
     }
 
-    act(() => render(<Example value={1} />));
-
+    const container = document.createElement('div');
+    legacyRender(<Example value={1} />, container);
     expect(state.editableValue).toEqual('1');
     expect(state.externalValue).toEqual(1);
     expect(state.parsedValue).toEqual(1);
@@ -62,8 +60,7 @@ describe('useEditableValue', () => {
 
     // If there are NO pending changes,
     // an update to the external prop value should override the local/pending value.
-    act(() => render(<Example value={2} />));
-
+    legacyRender(<Example value={2} />, container);
     expect(state.editableValue).toEqual('2');
     expect(state.externalValue).toEqual(2);
     expect(state.parsedValue).toEqual(2);
@@ -81,8 +78,8 @@ describe('useEditableValue', () => {
       return null;
     }
 
-    act(() => render(<Example value={1} />));
-
+    const container = document.createElement('div');
+    legacyRender(<Example value={1} />, container);
     expect(state.editableValue).toEqual('1');
     expect(state.externalValue).toEqual(1);
     expect(state.parsedValue).toEqual(1);
@@ -105,8 +102,7 @@ describe('useEditableValue', () => {
 
     // If there ARE pending changes,
     // an update to the external prop value should NOT override the local/pending value.
-    act(() => render(<Example value={3} />));
-
+    legacyRender(<Example value={3} />, container);
     expect(state.editableValue).toEqual('2');
     expect(state.externalValue).toEqual(3);
     expect(state.parsedValue).toEqual(2);
@@ -124,8 +120,8 @@ describe('useEditableValue', () => {
       return null;
     }
 
-    act(() => render(<Example value={1} />));
-
+    const container = document.createElement('div');
+    legacyRender(<Example value={1} />, container);
     expect(state.editableValue).toEqual('1');
     expect(state.externalValue).toEqual(1);
     expect(state.parsedValue).toEqual(1);
@@ -157,8 +153,8 @@ describe('useEditableValue', () => {
       return null;
     }
 
-    act(() => render(<Example value={1} />));
-
+    const container = document.createElement('div');
+    legacyRender(<Example value={1} />, container);
     expect(state.editableValue).toEqual('1');
     expect(state.externalValue).toEqual(1);
     expect(state.parsedValue).toEqual(1);

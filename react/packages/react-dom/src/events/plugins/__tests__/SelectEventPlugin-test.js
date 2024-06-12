@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -10,16 +10,15 @@
 'use strict';
 
 let React;
-let ReactDOMClient;
-let act;
+let ReactDOM;
 
 describe('SelectEventPlugin', () => {
   let container;
 
   beforeEach(() => {
     React = require('react');
-    ReactDOMClient = require('react-dom/client');
-    act = require('internal-test-utils').act;
+    ReactDOM = require('react-dom');
+
     container = document.createElement('div');
     document.body.appendChild(container);
   });
@@ -30,7 +29,7 @@ describe('SelectEventPlugin', () => {
   });
 
   // See https://github.com/facebook/react/pull/3639 for details.
-  it('does not get confused when dependent events are registered independently', async () => {
+  it('does not get confused when dependent events are registered independently', () => {
     const select = jest.fn();
     const onSelect = event => {
       expect(typeof event).toBe('object');
@@ -39,14 +38,11 @@ describe('SelectEventPlugin', () => {
       select(event.currentTarget);
     };
 
-    const root = ReactDOMClient.createRoot(container);
-    const node = await (async function () {
-      await act(() => {
-        // Pass `onMouseDown` so React registers a top-level listener.
-        root.render(<input type="text" onMouseDown={function () {}} />);
-      });
-      return container.firstChild;
-    })();
+    // Pass `onMouseDown` so React registers a top-level listener.
+    const node = ReactDOM.render(
+      <input type="text" onMouseDown={function() {}} />,
+      container,
+    );
 
     // Trigger `mousedown` and `mouseup`. Note that
     // React is not currently listening to `mouseup`.
@@ -63,10 +59,8 @@ describe('SelectEventPlugin', () => {
       }),
     );
 
-    await act(() => {
-      // Now subscribe to `onSelect`
-      root.render(<input type="text" onSelect={onSelect} />);
-    });
+    // Now subscribe to `onSelect`.
+    ReactDOM.render(<input type="text" onSelect={onSelect} />, container);
     node.focus();
 
     // This triggers a `select` event in our polyfill.
@@ -80,7 +74,7 @@ describe('SelectEventPlugin', () => {
     expect(select).toHaveBeenCalledTimes(1);
   });
 
-  it('should fire `onSelect` when a listener is present', async () => {
+  it('should fire `onSelect` when a listener is present', () => {
     const select = jest.fn();
     const onSelect = event => {
       expect(typeof event).toBe('object');
@@ -89,14 +83,10 @@ describe('SelectEventPlugin', () => {
       select(event.currentTarget);
     };
 
-    const node = await (async function () {
-      const root = ReactDOMClient.createRoot(container);
-      await act(() => {
-        root.render(<input type="text" onSelect={onSelect} />);
-      });
-      return container.firstChild;
-    })();
-
+    const node = ReactDOM.render(
+      <input type="text" onSelect={onSelect} />,
+      container,
+    );
     node.focus();
 
     let nativeEvent = new MouseEvent('focus', {
@@ -118,7 +108,7 @@ describe('SelectEventPlugin', () => {
     expect(select).toHaveBeenCalledTimes(1);
   });
 
-  it('should fire `onSelectCapture` when a listener is present', async () => {
+  it('should fire `onSelectCapture` when a listener is present', () => {
     const select = jest.fn();
     const onSelectCapture = event => {
       expect(typeof event).toBe('object');
@@ -127,14 +117,10 @@ describe('SelectEventPlugin', () => {
       select(event.currentTarget);
     };
 
-    const node = await (async function () {
-      const root = ReactDOMClient.createRoot(container);
-      await act(() => {
-        root.render(<input type="text" onSelectCapture={onSelectCapture} />);
-      });
-      return container.firstChild;
-    })();
-
+    const node = ReactDOM.render(
+      <input type="text" onSelectCapture={onSelectCapture} />,
+      container,
+    );
     node.focus();
 
     let nativeEvent = new MouseEvent('focus', {
@@ -157,7 +143,7 @@ describe('SelectEventPlugin', () => {
   });
 
   // Regression test for https://github.com/facebook/react/issues/11379
-  it('should not wait for `mouseup` after receiving `dragend`', async () => {
+  it('should not wait for `mouseup` after receiving `dragend`', () => {
     const select = jest.fn();
     const onSelect = event => {
       expect(typeof event).toBe('object');
@@ -166,14 +152,10 @@ describe('SelectEventPlugin', () => {
       select(event.currentTarget);
     };
 
-    const node = await (async function () {
-      const root = ReactDOMClient.createRoot(container);
-      await act(() => {
-        root.render(<input type="text" onSelect={onSelect} />);
-      });
-      return container.firstChild;
-    })();
-
+    const node = ReactDOM.render(
+      <input type="text" onSelect={onSelect} />,
+      container,
+    );
     node.focus();
 
     let nativeEvent = new MouseEvent('focus', {
@@ -195,17 +177,12 @@ describe('SelectEventPlugin', () => {
     expect(select).toHaveBeenCalledTimes(1);
   });
 
-  it('should handle selectionchange events', async function () {
+  it('should handle selectionchange events', function() {
     const onSelect = jest.fn();
-
-    const node = await (async function () {
-      const root = ReactDOMClient.createRoot(container);
-      await act(() => {
-        root.render(<input type="text" onSelect={onSelect} />);
-      });
-      return container.firstChild;
-    })();
-
+    const node = ReactDOM.render(
+      <input type="text" onSelect={onSelect} />,
+      container,
+    );
     node.focus();
 
     // Make sure the event was not called before we emit the selection change event

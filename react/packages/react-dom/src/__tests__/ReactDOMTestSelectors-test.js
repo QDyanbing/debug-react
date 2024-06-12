@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -11,7 +11,7 @@
 
 describe('ReactDOMTestSelectors', () => {
   let React;
-  let createRoot;
+
   let act;
   let createComponentSelector;
   let createHasPseudoClassSelector;
@@ -23,6 +23,7 @@ describe('ReactDOMTestSelectors', () => {
   let focusWithin;
   let getFindAllNodesFailureDescription;
   let observeVisibleRects;
+  let render;
 
   let container;
 
@@ -30,8 +31,7 @@ describe('ReactDOMTestSelectors', () => {
     jest.resetModules();
 
     React = require('react');
-
-    act = require('internal-test-utils').act;
+    act = React.unstable_act;
 
     if (__EXPERIMENTAL__ || global.__WWW__) {
       const ReactDOM = require('react-dom/unstable_testing');
@@ -46,7 +46,7 @@ describe('ReactDOMTestSelectors', () => {
       getFindAllNodesFailureDescription =
         ReactDOM.getFindAllNodesFailureDescription;
       observeVisibleRects = ReactDOM.observeVisibleRects;
-      createRoot = ReactDOM.createRoot;
+      render = ReactDOM.render;
     }
 
     container = document.createElement('div');
@@ -59,7 +59,7 @@ describe('ReactDOMTestSelectors', () => {
 
   describe('findAllNodes', () => {
     // @gate www || experimental
-    it('should support searching from the document root', async () => {
+    it('should support searching from the document root', () => {
       function Example() {
         return (
           <div>
@@ -68,10 +68,7 @@ describe('ReactDOMTestSelectors', () => {
         );
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Example />);
-      });
+      render(<Example />, container);
 
       const matches = findAllNodes(document.body, [
         createComponentSelector(Example),
@@ -82,7 +79,7 @@ describe('ReactDOMTestSelectors', () => {
     });
 
     // @gate www || experimental
-    it('should support searching from the container', async () => {
+    it('should support searching from the container', () => {
       function Example() {
         return (
           <div>
@@ -91,10 +88,7 @@ describe('ReactDOMTestSelectors', () => {
         );
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Example />);
-      });
+      render(<Example />, container);
 
       const matches = findAllNodes(container, [
         createComponentSelector(Example),
@@ -105,7 +99,7 @@ describe('ReactDOMTestSelectors', () => {
     });
 
     // @gate www || experimental
-    it('should support searching from a previous match if the match had a data-testname', async () => {
+    it('should support searching from a previous match if the match had a data-testname', () => {
       function Outer() {
         return (
           <div data-testname="outer" id="outer">
@@ -118,10 +112,7 @@ describe('ReactDOMTestSelectors', () => {
         return <div data-testname="inner" id="inner" />;
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Outer />);
-      });
+      render(<Outer />, container);
 
       let matches = findAllNodes(container, [
         createComponentSelector(Outer),
@@ -139,7 +130,7 @@ describe('ReactDOMTestSelectors', () => {
     });
 
     // @gate www || experimental
-    it('should not support searching from a previous match if the match did not have a data-testname', async () => {
+    it('should not support searching from a previous match if the match did not have a data-testname', () => {
       function Outer() {
         return (
           <div id="outer">
@@ -152,10 +143,7 @@ describe('ReactDOMTestSelectors', () => {
         return <div id="inner" />;
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Outer />);
-      });
+      render(<Outer />, container);
 
       const matches = findAllNodes(container, [createComponentSelector(Outer)]);
       expect(matches).toHaveLength(1);
@@ -172,7 +160,7 @@ describe('ReactDOMTestSelectors', () => {
     });
 
     // @gate www || experimental
-    it('should support an multiple component types in the selector array', async () => {
+    it('should support an multiple component types in the selector array', () => {
       function Outer() {
         return (
           <>
@@ -197,10 +185,7 @@ describe('ReactDOMTestSelectors', () => {
         );
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Outer />);
-      });
+      render(<Outer />, container);
 
       let matches = findAllNodes(document.body, [
         createComponentSelector(Outer),
@@ -229,7 +214,7 @@ describe('ReactDOMTestSelectors', () => {
     });
 
     // @gate www || experimental
-    it('should find multiple matches', async () => {
+    it('should find multiple matches', () => {
       function Example1() {
         return (
           <div>
@@ -247,15 +232,13 @@ describe('ReactDOMTestSelectors', () => {
         );
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(
-          <>
-            <Example1 />
-            <Example2 />
-          </>,
-        );
-      });
+      render(
+        <>
+          <Example1 />
+          <Example2 />
+        </>,
+        container,
+      );
 
       const matches = findAllNodes(document.body, [
         createTestNameSelector('match'),
@@ -269,7 +252,7 @@ describe('ReactDOMTestSelectors', () => {
     });
 
     // @gate www || experimental
-    it('should ignore nested matches', async () => {
+    it('should ignore nested matches', () => {
       function Example() {
         return (
           <div data-testname="match" id="match1">
@@ -278,10 +261,7 @@ describe('ReactDOMTestSelectors', () => {
         );
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Example />);
-      });
+      render(<Example />, container);
 
       const matches = findAllNodes(document.body, [
         createComponentSelector(Example),
@@ -292,7 +272,7 @@ describe('ReactDOMTestSelectors', () => {
     });
 
     // @gate www || experimental
-    it('should enforce the specific order of selectors', async () => {
+    it('should enforce the specific order of selectors', () => {
       function Outer() {
         return (
           <>
@@ -305,10 +285,7 @@ describe('ReactDOMTestSelectors', () => {
         return <div data-testname="match" id="match1" />;
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Outer />);
-      });
+      render(<Outer />, container);
 
       expect(
         findAllNodes(document.body, [
@@ -320,7 +297,7 @@ describe('ReactDOMTestSelectors', () => {
     });
 
     // @gate www || experimental
-    it('should not search within hidden subtrees', async () => {
+    it('should not search within hidden subtrees', () => {
       const ref1 = React.createRef(null);
       const ref2 = React.createRef(null);
 
@@ -338,10 +315,7 @@ describe('ReactDOMTestSelectors', () => {
         return <div ref={ref2} data-testname="match" />;
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Outer />);
-      });
+      render(<Outer />, container);
 
       const matches = findAllNodes(document.body, [
         createComponentSelector(Outer),
@@ -353,7 +327,7 @@ describe('ReactDOMTestSelectors', () => {
     });
 
     // @gate www || experimental
-    it('should support filtering by display text', async () => {
+    it('should support filtering by display text', () => {
       function Example() {
         return (
           <div>
@@ -365,10 +339,7 @@ describe('ReactDOMTestSelectors', () => {
         );
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Example />);
-      });
+      render(<Example />, container);
 
       const matches = findAllNodes(document.body, [
         createComponentSelector(Example),
@@ -379,7 +350,7 @@ describe('ReactDOMTestSelectors', () => {
     });
 
     // @gate www || experimental
-    it('should support filtering by explicit accessibiliy role', async () => {
+    it('should support filtering by explicit accessibiliy role', () => {
       function Example() {
         return (
           <div>
@@ -393,10 +364,7 @@ describe('ReactDOMTestSelectors', () => {
         );
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Example />);
-      });
+      render(<Example />, container);
 
       const matches = findAllNodes(document.body, [
         createComponentSelector(Example),
@@ -407,7 +375,7 @@ describe('ReactDOMTestSelectors', () => {
     });
 
     // @gate www || experimental
-    it('should support filtering by explicit secondary accessibiliy role', async () => {
+    it('should support filtering by explicit secondary accessibiliy role', () => {
       const ref = React.createRef();
 
       function Example() {
@@ -421,10 +389,7 @@ describe('ReactDOMTestSelectors', () => {
         );
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Example />);
-      });
+      render(<Example />, container);
 
       const matches = findAllNodes(document.body, [
         createComponentSelector(Example),
@@ -435,7 +400,7 @@ describe('ReactDOMTestSelectors', () => {
     });
 
     // @gate www || experimental
-    it('should support filtering by implicit accessibiliy role', async () => {
+    it('should support filtering by implicit accessibiliy role', () => {
       function Example() {
         return (
           <div>
@@ -447,10 +412,7 @@ describe('ReactDOMTestSelectors', () => {
         );
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Example />);
-      });
+      render(<Example />, container);
 
       const matches = findAllNodes(document.body, [
         createComponentSelector(Example),
@@ -461,7 +423,7 @@ describe('ReactDOMTestSelectors', () => {
     });
 
     // @gate www || experimental
-    it('should support filtering by implicit accessibiliy role with attributes qualifications', async () => {
+    it('should support filtering by implicit accessibiliy role with attributes qualifications', () => {
       function Example() {
         return (
           <div>
@@ -473,10 +435,7 @@ describe('ReactDOMTestSelectors', () => {
         );
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Example />);
-      });
+      render(<Example />, container);
 
       const matches = findAllNodes(document.body, [
         createComponentSelector(Example),
@@ -487,7 +446,7 @@ describe('ReactDOMTestSelectors', () => {
     });
 
     // @gate www || experimental
-    it('should support searching ahead with the has() selector', async () => {
+    it('should support searching ahead with the has() selector', () => {
       function Example() {
         return (
           <div>
@@ -507,10 +466,7 @@ describe('ReactDOMTestSelectors', () => {
         );
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Example />);
-      });
+      render(<Example />, container);
 
       const matches = findAllNodes(document.body, [
         createComponentSelector(Example),
@@ -533,16 +489,13 @@ describe('ReactDOMTestSelectors', () => {
     });
 
     // @gate www || experimental
-    it('should throw if an invalid host root is specified', async () => {
+    it('should throw if an invalid host root is specified', () => {
       const ref = React.createRef();
       function Example() {
         return <div ref={ref} />;
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Example />);
-      });
+      render(<Example />, container);
 
       expect(() => findAllNodes(ref.current, [])).toThrow(
         'Invalid host root specified. Should be either a React container or a node with a testname attribute.',
@@ -552,7 +505,7 @@ describe('ReactDOMTestSelectors', () => {
 
   describe('getFindAllNodesFailureDescription', () => {
     // @gate www || experimental
-    it('should describe findAllNodes failures caused by the component type selector', async () => {
+    it('should describe findAllNodes failures caused by the component type selector', () => {
       function Outer() {
         return <Middle />;
       }
@@ -563,10 +516,7 @@ describe('ReactDOMTestSelectors', () => {
         return <div data-testname="match" />;
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Outer />);
-      });
+      render(<Outer />, container);
 
       const description = getFindAllNodesFailureDescription(document.body, [
         createComponentSelector(Outer),
@@ -585,7 +535,7 @@ No matching component was found for:
     });
 
     // @gate www || experimental
-    it('should return null if findAllNodes was able to find a match', async () => {
+    it('should return null if findAllNodes was able to find a match', () => {
       function Example() {
         return (
           <div>
@@ -594,10 +544,7 @@ No matching component was found for:
         );
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Example />);
-      });
+      render(<Example />, container);
 
       const description = getFindAllNodesFailureDescription(document.body, [
         createComponentSelector(Example),
@@ -611,7 +558,7 @@ No matching component was found for:
     // Stub out getBoundingClientRect for the specified target.
     // This API is required by the test selectors but it isn't implemented by jsdom.
     function setBoundingClientRect(target, {x, y, width, height}) {
-      target.getBoundingClientRect = function () {
+      target.getBoundingClientRect = function() {
         return {
           width,
           height,
@@ -624,7 +571,7 @@ No matching component was found for:
     }
 
     // @gate www || experimental
-    it('should return a single rect for a component that returns a single root host element', async () => {
+    it('should return a single rect for a component that returns a single root host element', () => {
       const ref = React.createRef();
 
       function Example() {
@@ -636,10 +583,7 @@ No matching component was found for:
         );
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Example />);
-      });
+      render(<Example />, container);
 
       setBoundingClientRect(ref.current, {
         x: 10,
@@ -661,7 +605,7 @@ No matching component was found for:
     });
 
     // @gate www || experimental
-    it('should return a multiple rects for multiple matches', async () => {
+    it('should return a multiple rects for multiple matches', () => {
       const outerRef = React.createRef();
       const innerRef = React.createRef();
 
@@ -677,10 +621,7 @@ No matching component was found for:
         return <div ref={innerRef} />;
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Outer />);
-      });
+      render(<Outer />, container);
 
       setBoundingClientRect(outerRef.current, {
         x: 10,
@@ -714,7 +655,7 @@ No matching component was found for:
     });
 
     // @gate www || experimental
-    it('should return a multiple rects for single match that returns a fragment', async () => {
+    it('should return a multiple rects for single match that returns a fragment', () => {
       const refA = React.createRef();
       const refB = React.createRef();
 
@@ -730,10 +671,7 @@ No matching component was found for:
         );
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Example />);
-      });
+      render(<Example />, container);
 
       setBoundingClientRect(refA.current, {
         x: 10,
@@ -767,7 +705,7 @@ No matching component was found for:
     });
 
     // @gate www || experimental
-    it('should merge overlapping rects', async () => {
+    it('should merge overlapping rects', () => {
       const refA = React.createRef();
       const refB = React.createRef();
       const refC = React.createRef();
@@ -782,10 +720,7 @@ No matching component was found for:
         );
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Example />);
-      });
+      render(<Example />, container);
 
       setBoundingClientRect(refA.current, {
         x: 10,
@@ -825,7 +760,7 @@ No matching component was found for:
     });
 
     // @gate www || experimental
-    it('should merge some types of adjacent rects (if they are the same in one dimension)', async () => {
+    it('should merge some types of adjacent rects (if they are the same in one dimension)', () => {
       const refA = React.createRef();
       const refB = React.createRef();
       const refC = React.createRef();
@@ -848,10 +783,7 @@ No matching component was found for:
         );
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Example />);
-      });
+      render(<Example />, container);
 
       // A, B, and C are all adjacent and/or overlapping, with the same height.
       setBoundingClientRect(refA.current, {
@@ -928,7 +860,7 @@ No matching component was found for:
     });
 
     // @gate www || experimental
-    it('should not search within hidden subtrees', async () => {
+    it('should not search within hidden subtrees', () => {
       const refA = React.createRef();
       const refB = React.createRef();
       const refC = React.createRef();
@@ -943,10 +875,7 @@ No matching component was found for:
         );
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Example />);
-      });
+      render(<Example />, container);
 
       setBoundingClientRect(refA.current, {
         x: 10,
@@ -988,7 +917,7 @@ No matching component was found for:
 
   describe('focusWithin', () => {
     // @gate www || experimental
-    it('should return false if the specified component path has no matches', async () => {
+    it('should return false if the specified component path has no matches', () => {
       function Example() {
         return <Child />;
       }
@@ -999,10 +928,7 @@ No matching component was found for:
         return null;
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Example />);
-      });
+      render(<Example />, container);
 
       const didFocus = focusWithin(document.body, [
         createComponentSelector(Example),
@@ -1012,7 +938,7 @@ No matching component was found for:
     });
 
     // @gate www || experimental
-    it('should return false if there are no focusable elements within the matched subtree', async () => {
+    it('should return false if there are no focusable elements within the matched subtree', () => {
       function Example() {
         return <Child />;
       }
@@ -1020,10 +946,7 @@ No matching component was found for:
         return 'not focusable';
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Example />);
-      });
+      render(<Example />, container);
 
       const didFocus = focusWithin(document.body, [
         createComponentSelector(Example),
@@ -1033,7 +956,7 @@ No matching component was found for:
     });
 
     // @gate www || experimental
-    it('should return false if the only focusable elements are disabled', async () => {
+    it('should return false if the only focusable elements are disabled', () => {
       function Example() {
         return (
           <button disabled={true} style={{width: 10, height: 10}}>
@@ -1042,10 +965,7 @@ No matching component was found for:
         );
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Example />);
-      });
+      render(<Example />, container);
 
       const didFocus = focusWithin(document.body, [
         createComponentSelector(Example),
@@ -1054,15 +974,12 @@ No matching component was found for:
     });
 
     // @gate www || experimental
-    it('should return false if the only focusable elements are hidden', async () => {
+    it('should return false if the only focusable elements are hidden', () => {
       function Example() {
         return <button hidden={true}>not clickable</button>;
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Example />);
-      });
+      render(<Example />, container);
 
       const didFocus = focusWithin(document.body, [
         createComponentSelector(Example),
@@ -1071,7 +988,7 @@ No matching component was found for:
     });
 
     // @gate www || experimental
-    it('should successfully focus the first focusable element within the tree', async () => {
+    it('should successfully focus the first focusable element within the tree', () => {
       const secondRef = React.createRef(null);
 
       const handleFirstFocus = jest.fn();
@@ -1112,10 +1029,7 @@ No matching component was found for:
         );
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Example />);
-      });
+      render(<Example />, container);
 
       const didFocus = focusWithin(document.body, [
         createComponentSelector(Example),
@@ -1129,7 +1043,7 @@ No matching component was found for:
     });
 
     // @gate www || experimental
-    it('should successfully focus the first focusable element even if application logic interferes', async () => {
+    it('should successfully focus the first focusable element even if application logic interferes', () => {
       const ref = React.createRef(null);
 
       const handleFocus = jest.fn(event => {
@@ -1147,10 +1061,7 @@ No matching component was found for:
         );
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Example />);
-      });
+      render(<Example />, container);
 
       const didFocus = focusWithin(document.body, [
         createComponentSelector(Example),
@@ -1162,7 +1073,7 @@ No matching component was found for:
     });
 
     // @gate www || experimental
-    it('should not focus within hidden subtrees', async () => {
+    it('should not focus within hidden subtrees', () => {
       const secondRef = React.createRef(null);
 
       const handleFirstFocus = jest.fn();
@@ -1205,10 +1116,7 @@ No matching component was found for:
         );
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Example />);
-      });
+      render(<Example />, container);
 
       const didFocus = focusWithin(document.body, [
         createComponentSelector(Example),
@@ -1226,7 +1134,7 @@ No matching component was found for:
     // Stub out getBoundingClientRect for the specified target.
     // This API is required by the test selectors but it isn't implemented by jsdom.
     function setBoundingClientRect(target, {x, y, width, height}) {
-      target.getBoundingClientRect = function () {
+      target.getBoundingClientRect = function() {
         return {
           width,
           height,
@@ -1289,17 +1197,14 @@ No matching component was found for:
     });
 
     // @gate www || experimental
-    it('should notify a listener when the underlying instance intersection changes', async () => {
+    it('should notify a listener when the underlying instance intersection changes', () => {
       const ref = React.createRef(null);
 
       function Example() {
         return <div ref={ref} />;
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Example />);
-      });
+      render(<Example />, container);
 
       // Stub out the size of the element this test will be observing.
       const rect = {
@@ -1329,7 +1234,7 @@ No matching component was found for:
     });
 
     // @gate www || experimental
-    it('should notify a listener of multiple targets when the underlying instance intersection changes', async () => {
+    it('should notify a listener of multiple targets when the underlying instance intersection changes', () => {
       const ref1 = React.createRef(null);
       const ref2 = React.createRef(null);
 
@@ -1342,10 +1247,7 @@ No matching component was found for:
         );
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Example />);
-      });
+      render(<Example />, container);
 
       // Stub out the size of the element this test will be observing.
       const rect1 = {
@@ -1409,17 +1311,14 @@ No matching component was found for:
     });
 
     // @gate www || experimental
-    it('should stop listening when its disconnected', async () => {
+    it('should stop listening when its disconnected', () => {
       const ref = React.createRef(null);
 
       function Example() {
         return <div ref={ref} />;
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Example />);
-      });
+      render(<Example />, container);
 
       // Stub out the size of the element this test will be observing.
       const rect = {
@@ -1447,7 +1346,7 @@ No matching component was found for:
 
     // This test reuires gating because it relies on the __DEV__ only commit hook to work.
     // @gate www || experimental && __DEV__
-    it('should update which targets its listening to after a commit', async () => {
+    it('should update which targets its listening to after a commit', () => {
       const ref1 = React.createRef(null);
       const ref2 = React.createRef(null);
 
@@ -1464,10 +1363,7 @@ No matching component was found for:
         );
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Example />);
-      });
+      render(<Example />, container);
 
       // Stub out the size of the element this test will be observing.
       const rect1 = {
@@ -1493,7 +1389,7 @@ No matching component was found for:
         {rect: rect1, ratio: 1},
       ]);
 
-      await act(() => increment());
+      act(() => increment());
 
       const rect2 = {
         x: 110,
@@ -1516,7 +1412,7 @@ No matching component was found for:
         {rect: rect2, ratio: 0.25},
       ]);
 
-      await act(() => increment());
+      act(() => increment());
 
       handleVisibilityChange.mockClear();
 
@@ -1529,7 +1425,7 @@ No matching component was found for:
     });
 
     // @gate www || experimental
-    it('should not observe components within hidden subtrees', async () => {
+    it('should not observe components within hidden subtrees', () => {
       const ref1 = React.createRef(null);
       const ref2 = React.createRef(null);
 
@@ -1542,10 +1438,7 @@ No matching component was found for:
         );
       }
 
-      const root = createRoot(container);
-      await act(() => {
-        root.render(<Example />);
-      });
+      render(<Example />, container);
 
       // Stub out the size of the element this test will be observing.
       const rect1 = {

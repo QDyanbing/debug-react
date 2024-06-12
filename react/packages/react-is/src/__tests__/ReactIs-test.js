@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -23,7 +23,7 @@ describe('ReactIs', () => {
     ReactIs = require('react-is');
 
     if (gate(flags => flags.enableSuspenseList)) {
-      SuspenseList = React.unstable_SuspenseList;
+      SuspenseList = React.SuspenseList;
     }
   });
 
@@ -67,6 +67,18 @@ describe('ReactIs', () => {
     expect(ReactIs.isValidElementType(MemoComponent)).toEqual(true);
     expect(ReactIs.isValidElementType(Context.Provider)).toEqual(true);
     expect(ReactIs.isValidElementType(Context.Consumer)).toEqual(true);
+    if (!__EXPERIMENTAL__) {
+      let factory;
+      expect(() => {
+        factory = React.createFactory('div');
+      }).toWarnDev(
+        'Warning: React.createFactory() is deprecated and will be removed in a ' +
+          'future major release. Consider using JSX or use React.createElement() ' +
+          'directly instead.',
+        {withoutStack: true},
+      );
+      expect(ReactIs.isValidElementType(factory)).toEqual(true);
+    }
     expect(ReactIs.isValidElementType(React.Fragment)).toEqual(true);
     expect(ReactIs.isValidElementType(React.StrictMode)).toEqual(true);
     expect(ReactIs.isValidElementType(React.Suspense)).toEqual(true);

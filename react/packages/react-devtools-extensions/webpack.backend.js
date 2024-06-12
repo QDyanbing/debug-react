@@ -1,11 +1,7 @@
 'use strict';
 
 const {resolve} = require('path');
-const Webpack = require('webpack');
-
-const {resolveFeatureFlags} = require('react-devtools-shared/buildUtils');
-const SourceMapIgnoreListPlugin = require('react-devtools-shared/SourceMapIgnoreListPlugin');
-
+const {DefinePlugin} = require('webpack');
 const {
   DARK_MODE_DIMMED_WARNING_COLOR,
   DARK_MODE_DIMMED_ERROR_COLOR,
@@ -16,6 +12,7 @@ const {
   GITHUB_URL,
   getVersionString,
 } = require('./utils');
+const {resolveFeatureFlags} = require('react-devtools-shared/buildUtils');
 
 const NODE_ENV = process.env.NODE_ENV;
 if (!NODE_ENV) {
@@ -35,24 +32,25 @@ const __DEV__ = NODE_ENV === 'development';
 
 const DEVTOOLS_VERSION = getVersionString(process.env.DEVTOOLS_VERSION);
 
-const IS_CHROME = process.env.IS_CHROME === 'true';
-const IS_FIREFOX = process.env.IS_FIREFOX === 'true';
-const IS_EDGE = process.env.IS_EDGE === 'true';
-
 const featureFlagTarget = process.env.FEATURE_FLAG_TARGET || 'extension-oss';
 
 module.exports = {
   mode: __DEV__ ? 'development' : 'production',
-  devtool: false,
+  devtool: __DEV__ ? 'cheap-module-eval-source-map' : false,
   entry: {
     backend: './src/backend.js',
   },
   output: {
     path: __dirname + '/build',
-    filename: 'react_devtools_backend_compact.js',
+    filename: 'react_devtools_backend.js',
   },
   node: {
-    global: false,
+    // Don't define a polyfill on window.setImmediate
+    setImmediate: false,
+
+    // source-maps package has a dependency on 'fs'
+    // but this build won't trigger that code path
+    fs: 'empty',
   },
   resolve: {
     alias: {
@@ -68,15 +66,10 @@ module.exports = {
     minimize: false,
   },
   plugins: [
-    new Webpack.ProvidePlugin({
-      process: 'process/browser',
-    }),
-    new Webpack.DefinePlugin({
+    new DefinePlugin({
       __DEV__: true,
       __PROFILE__: false,
       __DEV____DEV__: true,
-      // By importing `shared/` we may import ReactFeatureFlags
-      __EXPERIMENTAL__: true,
       'process.env.DEVTOOLS_PACKAGE': `"react-devtools-extensions"`,
       'process.env.DEVTOOLS_VERSION': `"${DEVTOOLS_VERSION}"`,
       'process.env.GITHUB_URL': `"${GITHUB_URL}"`,
@@ -86,16 +79,6 @@ module.exports = {
       'process.env.LIGHT_MODE_DIMMED_WARNING_COLOR': `"${LIGHT_MODE_DIMMED_WARNING_COLOR}"`,
       'process.env.LIGHT_MODE_DIMMED_ERROR_COLOR': `"${LIGHT_MODE_DIMMED_ERROR_COLOR}"`,
       'process.env.LIGHT_MODE_DIMMED_LOG_COLOR': `"${LIGHT_MODE_DIMMED_LOG_COLOR}"`,
-      'process.env.IS_CHROME': IS_CHROME,
-      'process.env.IS_FIREFOX': IS_FIREFOX,
-      'process.env.IS_EDGE': IS_EDGE,
-    }),
-    new Webpack.SourceMapDevToolPlugin({
-      filename: '[file].map',
-      noSources: !__DEV__,
-    }),
-    new SourceMapIgnoreListPlugin({
-      shouldIgnoreSource: () => !__DEV__,
     }),
   ],
   module: {

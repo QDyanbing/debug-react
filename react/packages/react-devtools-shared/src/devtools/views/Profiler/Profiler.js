@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -17,7 +17,6 @@ import CommitFlamegraph from './CommitFlamegraph';
 import CommitRanked from './CommitRanked';
 import RootSelector from './RootSelector';
 import {Timeline} from 'react-devtools-timeline/src/Timeline';
-import SidebarEventInfo from './SidebarEventInfo';
 import RecordToggle from './RecordToggle';
 import ReloadAndProfileButton from './ReloadAndProfileButton';
 import ProfilingImportExportButtons from './ProfilingImportExportButtons';
@@ -37,7 +36,7 @@ import {TimelineContext} from 'react-devtools-timeline/src/TimelineContext';
 
 import styles from './Profiler.css';
 
-function Profiler(_: {}) {
+function Profiler(_: {||}) {
   const {
     didRecordCommits,
     isProcessingData,
@@ -49,8 +48,9 @@ function Profiler(_: {}) {
     supportsProfiling,
   } = useContext(ProfilerContext);
 
-  const {file: timelineTraceEventData, searchInputContainerRef} =
-    useContext(TimelineContext);
+  const {file: timelineTraceEventData, searchInputContainerRef} = useContext(
+    TimelineContext,
+  );
 
   const {supportsTimeline} = useContext(StoreContext);
 
@@ -102,9 +102,6 @@ function Profiler(_: {}) {
           }
         }
         break;
-      case 'timeline':
-        sidebar = <SidebarEventInfo />;
-        break;
       default:
         break;
     }
@@ -116,7 +113,9 @@ function Profiler(_: {}) {
         <div className={styles.LeftColumn}>
           <div className={styles.Toolbar}>
             <RecordToggle disabled={!supportsProfiling} />
-            <ReloadAndProfileButton disabled={!supportsProfiling} />
+            <ReloadAndProfileButton
+              disabled={selectedTabID === 'timeline' || !supportsProfiling}
+            />
             <ClearProfilingDataButton />
             <ProfilingImportExportButtons />
             <div className={styles.VRule} />
@@ -148,7 +147,9 @@ function Profiler(_: {}) {
             <ModalDialog />
           </div>
         </div>
-        <div className={styles.RightColumn}>{sidebar}</div>
+        {isLegacyProfilerSelected && (
+          <div className={styles.RightColumn}>{sidebar}</div>
+        )}
         <SettingsModal />
       </div>
     </SettingsModalContextController>
@@ -190,4 +191,4 @@ const tabsWithTimeline = [
   },
 ];
 
-export default (portaledContent(Profiler): React.ComponentType<{}>);
+export default portaledContent(Profiler);

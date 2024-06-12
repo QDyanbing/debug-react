@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -8,8 +8,8 @@
  */
 
 export {
-  __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE,
-  act,
+  __SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED,
+  act as unstable_act,
   Children,
   Component,
   Fragment,
@@ -20,14 +20,12 @@ export {
   cloneElement,
   createContext,
   createElement,
+  createFactory,
   createRef,
-  use,
   forwardRef,
   isValidElement,
   lazy,
   memo,
-  cache,
-  unstable_useCacheRefresh,
   startTransition,
   useId,
   useCallback,
@@ -40,11 +38,9 @@ export {
   useLayoutEffect,
   useMemo,
   useReducer,
-  useOptimistic,
   useRef,
   useState,
   useSyncExternalStore,
   useTransition,
-  useActionState,
   version,
-} from './src/ReactClient';
+} from './src/React';

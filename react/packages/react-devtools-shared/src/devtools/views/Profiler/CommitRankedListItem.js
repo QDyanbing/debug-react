@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -21,6 +21,7 @@ type Props = {
   data: ItemData,
   index: number,
   style: Object,
+  ...
 };
 
 function CommitRankedListItem({data, index, style}: Props) {
@@ -39,7 +40,7 @@ function CommitRankedListItem({data, index, style}: Props) {
   const {lineHeight} = useContext(SettingsContext);
 
   const handleClick = useCallback(
-    (event: $FlowFixMe) => {
+    event => {
       event.stopPropagation();
       const {id, name} = node;
       selectFiber(id, name);
@@ -79,7 +80,4 @@ function CommitRankedListItem({data, index, style}: Props) {
   );
 }
 
-export default (memo(
-  CommitRankedListItem,
-  areEqual,
-): React.ComponentType<Props>);
+export default memo<Props>(CommitRankedListItem, areEqual);

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -17,11 +17,8 @@ import {
   useContext,
   useDebugValue,
   useEffect,
-  useOptimistic,
   useState,
-  use,
 } from 'react';
-import {useFormState, useFormStatus} from 'react-dom';
 
 const object = {
   string: 'abc',
@@ -76,8 +73,6 @@ function FunctionWithHooks(props: any, ref: React$Ref<any>) {
   const [count, updateCount] = useState(0);
   // eslint-disable-next-line no-unused-vars
   const contextValueA = useContext(ContextA);
-  useOptimistic<number, mixed>(1);
-  use(ContextA);
 
   // eslint-disable-next-line no-unused-vars
   const [_, __] = useState(object);
@@ -108,126 +103,30 @@ function FunctionWithHooks(props: any, ref: React$Ref<any>) {
 const MemoWithHooks = memo(FunctionWithHooks);
 const ForwardRefWithHooks = forwardRef(FunctionWithHooks);
 
-function wrapWithHoc(Component: (props: any, ref: React$Ref<any>) => any) {
+function wrapWithHoc(Component) {
   function Hoc() {
     return <Component />;
   }
-  // $FlowFixMe[prop-missing]
+  // $FlowFixMe
   const displayName = Component.displayName || Component.name;
-  // $FlowFixMe[incompatible-type] found when upgrading Flow
   Hoc.displayName = `withHoc(${displayName})`;
   return Hoc;
 }
 const HocWithHooks = wrapWithHoc(FunctionWithHooks);
 
-const Suspendender = React.lazy(() => {
-  return new Promise<any>(resolve => {
-    setTimeout(() => {
-      resolve({
-        default: () => 'Finished!',
-      });
-    }, 3000);
-  });
-});
-function Transition() {
-  const [show, setShow] = React.useState(false);
-  const [isPending, startTransition] = React.useTransition();
-
-  return (
-    <div>
-      <React.Suspense fallback="Loading">
-        {isPending ? 'Pending' : null}
-        {show ? <Suspendender /> : null}
-      </React.Suspense>
-      {!show && (
-        <button onClick={() => startTransition(() => setShow(true))}>
-          Transition
-        </button>
-      )}
-    </div>
-  );
-}
-
-function incrementWithDelay(previousState: number, formData: FormData) {
-  const incrementDelay = +formData.get('incrementDelay');
-  const shouldReject = formData.get('shouldReject');
-  const reason = formData.get('reason');
-
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      if (shouldReject) {
-        reject(reason);
-      } else {
-        resolve(previousState + 1);
-      }
-    }, incrementDelay);
-  });
-}
-
-function FormStatus() {
-  const status = useFormStatus();
-
-  return <pre>{JSON.stringify(status)}</pre>;
-}
-
-function Forms() {
-  const [state, formAction] = useFormState<any, any>(incrementWithDelay, 0);
-  return (
-    <form>
-      State: {state}&nbsp;
-      <label>
-        delay:
-        <input
-          name="incrementDelay"
-          defaultValue={5000}
-          type="text"
-          inputMode="numeric"
-        />
-      </label>
-      <label>
-        Reject:
-        <input name="reason" type="text" />
-        <input name="shouldReject" type="checkbox" />
-      </label>
-      <button formAction={formAction}>Increment</button>
-      <FormStatus />
-    </form>
-  );
-}
-
-class ErrorBoundary extends React.Component<{children?: React$Node}> {
-  state: {error: any} = {error: null};
-  static getDerivedStateFromError(error: mixed): {error: any} {
-    return {error};
-  }
-  componentDidCatch(error: any, info: any) {
-    console.error(error, info);
-  }
-  render(): any {
-    if (this.state.error) {
-      return <div>Error: {String(this.state.error)}</div>;
-    }
-    return this.props.children;
-  }
-}
-
-export default function CustomHooks(): React.Node {
+export default function CustomHooks() {
   return (
     <Fragment>
       <FunctionWithHooks />
       <MemoWithHooks />
       <ForwardRefWithHooks />
       <HocWithHooks />
-      <Transition />
-      <ErrorBoundary>
-        <Forms />
-      </ErrorBoundary>
     </Fragment>
   );
 }
 
 // Below copied from https://usehooks.com/
-function useDebounce(value: number, delay: number) {
+function useDebounce(value, delay) {
   // State and setters for debounced value
   const [debouncedValue, setDebouncedValue] = useState(value);
 

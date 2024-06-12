@@ -1,5 +1,5 @@
 const {resolve} = require('path');
-const Webpack = require('webpack');
+const {DefinePlugin} = require('webpack');
 const {
   DARK_MODE_DIMMED_WARNING_COLOR,
   DARK_MODE_DIMMED_ERROR_COLOR,
@@ -39,7 +39,7 @@ process.env.BABEL_CONFIG_ADDITIONAL_TARGETS = JSON.stringify({
 
 module.exports = {
   mode: __DEV__ ? 'development' : 'production',
-  devtool: __DEV__ ? 'eval-cheap-module-source-map' : 'source-map',
+  devtool: __DEV__ ? 'cheap-module-eval-source-map' : 'source-map',
   entry: {
     backend: './src/backend.js',
   },
@@ -62,13 +62,10 @@ module.exports = {
     },
   },
   node: {
-    global: false,
+    fs: 'empty',
   },
   plugins: [
-    new Webpack.ProvidePlugin({
-      process: 'process/browser',
-    }),
-    new Webpack.DefinePlugin({
+    new DefinePlugin({
       __DEV__,
       __EXPERIMENTAL__: true,
       __EXTENSION__: false,

@@ -1,16 +1,16 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
  * @emails react-core
- * @jest-environment ./scripts/jest/ReactDOMServerIntegrationEnvironment
  */
 
 let JSDOM;
 let React;
 let ReactDOMClient;
+let Scheduler;
 let clientAct;
 let ReactDOMFizzServer;
 let Stream;
@@ -23,7 +23,6 @@ let container;
 let buffer = '';
 let hasErrored = false;
 let fatalError = undefined;
-let waitForPaint;
 
 describe('useId', () => {
   beforeEach(() => {
@@ -31,15 +30,13 @@ describe('useId', () => {
     JSDOM = require('jsdom').JSDOM;
     React = require('react');
     ReactDOMClient = require('react-dom/client');
-    clientAct = require('internal-test-utils').act;
+    Scheduler = require('scheduler');
+    clientAct = require('jest-react').act;
     ReactDOMFizzServer = require('react-dom/server');
     Stream = require('stream');
     Suspense = React.Suspense;
     useId = React.useId;
     useState = React.useState;
-
-    const InternalTestUtils = require('internal-test-utils');
-    waitForPaint = InternalTestUtils.waitForPaint;
 
     // Test Environment
     const jsdom = new JSDOM(
@@ -121,7 +118,7 @@ describe('useId', () => {
     return <div id={id}>{children}</div>;
   }
 
-  it('basic example', async () => {
+  test('basic example', async () => {
     function App() {
       return (
         <div>
@@ -162,7 +159,7 @@ describe('useId', () => {
     `);
   });
 
-  it('indirections', async () => {
+  test('indirections', async () => {
     function App() {
       // There are no forks in this tree, but the parent and the child should
       // have different ids.
@@ -207,7 +204,7 @@ describe('useId', () => {
     `);
   });
 
-  it('StrictMode double rendering', async () => {
+  test('StrictMode double rendering', async () => {
     const {StrictMode} = React;
 
     function App() {
@@ -236,7 +233,7 @@ describe('useId', () => {
     `);
   });
 
-  it('empty (null) children', async () => {
+  test('empty (null) children', async () => {
     // We don't treat empty children different from non-empty ones, which means
     // they get allocated a slot when generating ids. There's no inherent reason
     // to do this; Fiber happens to allocate a fiber for null children that
@@ -275,7 +272,7 @@ describe('useId', () => {
     `);
   });
 
-  it('large ids', async () => {
+  test('large ids', async () => {
     // The component in this test outputs a recursive tree of nodes with ids,
     // where the underlying binary representation is an alternating series of 1s
     // and 0s. In other words, they are all of the form 101010101.
@@ -325,7 +322,7 @@ describe('useId', () => {
     }
   });
 
-  it('multiple ids in a single component', async () => {
+  test('multiple ids in a single component', async () => {
     function App() {
       const id1 = useId();
       const id2 = useId();
@@ -350,7 +347,7 @@ describe('useId', () => {
     `);
   });
 
-  it('local render phase updates', async () => {
+  test('local render phase updates', async () => {
     function App({swap}) {
       const [count, setCount] = useState(0);
       if (count < 3) {
@@ -375,7 +372,7 @@ describe('useId', () => {
     `);
   });
 
-  it('basic incremental hydration', async () => {
+  test('basic incremental hydration', async () => {
     function App() {
       return (
         <div>
@@ -416,7 +413,7 @@ describe('useId', () => {
     `);
   });
 
-  it('inserting/deleting siblings outside a dehydrated Suspense boundary', async () => {
+  test('inserting/deleting siblings outside a dehydrated Suspense boundary', async () => {
     const span = React.createRef(null);
     function App({swap}) {
       // Note: Using a dynamic array so these are treated as insertions and
@@ -445,7 +442,7 @@ describe('useId', () => {
     const dehydratedSpan = container.getElementsByTagName('span')[0];
     await clientAct(async () => {
       const root = ReactDOMClient.hydrateRoot(container, <App />);
-      await waitForPaint([]);
+      expect(Scheduler).toFlushUntilNextPaint([]);
       expect(container).toMatchInlineSnapshot(`
         <div
           id="container"
@@ -500,7 +497,7 @@ describe('useId', () => {
     expect(span.current).toBe(dehydratedSpan);
   });
 
-  it('inserting/deleting siblings inside a dehydrated Suspense boundary', async () => {
+  test('inserting/deleting siblings inside a dehydrated Suspense boundary', async () => {
     const span = React.createRef(null);
     function App({swap}) {
       // Note: Using a dynamic array so these are treated as insertions and
@@ -526,7 +523,7 @@ describe('useId', () => {
     const dehydratedSpan = container.getElementsByTagName('span')[0];
     await clientAct(async () => {
       const root = ReactDOMClient.hydrateRoot(container, <App />);
-      await waitForPaint([]);
+      expect(Scheduler).toFlushUntilNextPaint([]);
       expect(container).toMatchInlineSnapshot(`
         <div
           id="container"
@@ -575,7 +572,7 @@ describe('useId', () => {
     expect(span.current).toBe(dehydratedSpan);
   });
 
-  it('identifierPrefix option', async () => {
+  test('identifierPrefix option', async () => {
     function Child() {
       const id = useId();
       return <div>{id}</div>;
@@ -632,70 +629,6 @@ describe('useId', () => {
         </div>
         <div>
           :custom-prefix-r0:
-        </div>
-      </div>
-    `);
-  });
-
-  // https://github.com/vercel/next.js/issues/43033
-  // re-rendering in strict mode caused the localIdCounter to be reset but it the rerender hook does not
-  // increment it again. This only shows up as a problem for subsequent useId's because it affects child
-  // and sibling counters not the initial one
-  it('does not forget it mounted an id when re-rendering in dev', async () => {
-    function Parent() {
-      const id = useId();
-      return (
-        <div>
-          {id} <Child />
-        </div>
-      );
-    }
-    function Child() {
-      const id = useId();
-      return <div>{id}</div>;
-    }
-
-    function App({showMore}) {
-      return (
-        <React.StrictMode>
-          <Parent />
-        </React.StrictMode>
-      );
-    }
-
-    await serverAct(async () => {
-      const {pipe} = ReactDOMFizzServer.renderToPipeableStream(<App />);
-      pipe(writable);
-    });
-    expect(container).toMatchInlineSnapshot(`
-      <div
-        id="container"
-      >
-        <div>
-          :R0:
-          <!-- -->
-           
-          <div>
-            :R7:
-          </div>
-        </div>
-      </div>
-    `);
-
-    await clientAct(async () => {
-      ReactDOMClient.hydrateRoot(container, <App />);
-    });
-    expect(container).toMatchInlineSnapshot(`
-      <div
-        id="container"
-      >
-        <div>
-          :R0:
-          <!-- -->
-           
-          <div>
-            :R7:
-          </div>
         </div>
       </div>
     `);

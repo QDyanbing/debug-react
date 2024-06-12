@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -23,30 +23,27 @@ import {
 import {StoreContext, BridgeContext} from './context';
 import {sanitizeForParse, smartParse, smartStringify} from '../utils';
 
-type ACTION_RESET = {
+type ACTION_RESET = {|
   type: 'RESET',
   externalValue: any,
-};
-type ACTION_UPDATE = {
+|};
+type ACTION_UPDATE = {|
   type: 'UPDATE',
   editableValue: any,
   externalValue: any,
-};
+|};
 
 type UseEditableValueAction = ACTION_RESET | ACTION_UPDATE;
 type UseEditableValueDispatch = (action: UseEditableValueAction) => void;
-type UseEditableValueState = {
+type UseEditableValueState = {|
   editableValue: any,
   externalValue: any,
   hasPendingChanges: boolean,
   isValid: boolean,
   parsedValue: any,
-};
+|};
 
-function useEditableValueReducer(
-  state: UseEditableValueState,
-  action: UseEditableValueAction,
-) {
+function useEditableValueReducer(state, action) {
   switch (action.type) {
     case 'RESET':
       return {
@@ -147,7 +144,6 @@ export function useIsOverflowing(
 export function useLocalStorage<T>(
   key: string,
   initialValue: T | (() => T),
-  onValueSet?: (any, string) => void,
 ): [T, (value: T | (() => T)) => void] {
   const getValueFromLocalStorage = useCallback(() => {
     try {
@@ -168,7 +164,7 @@ export function useLocalStorage<T>(
   const [storedValue, setStoredValue] = useState<any>(getValueFromLocalStorage);
 
   const setValue = useCallback(
-    (value: $FlowFixMe) => {
+    value => {
       try {
         const valueToStore =
           value instanceof Function ? (value: any)(storedValue) : value;
@@ -177,10 +173,6 @@ export function useLocalStorage<T>(
 
         // Notify listeners that this setting has changed.
         window.dispatchEvent(new Event(key));
-
-        if (onValueSet != null) {
-          onValueSet(valueToStore, key);
-        }
       } catch (error) {
         console.log(error);
       }
@@ -191,7 +183,6 @@ export function useLocalStorage<T>(
   // Listen for changes to this local storage value made from other windows.
   // This enables the e.g. "⚛️ Elements" tab to update in response to changes from "⚛️ Settings".
   useLayoutEffect(() => {
-    // $FlowFixMe[missing-local-annot]
     const onStorage = event => {
       const newValue = getValueFromLocalStorage();
       if (key === event.key && storedValue !== newValue) {
@@ -219,18 +210,15 @@ export function useModalDismissSignal(
       return () => {};
     }
 
-    const handleRootNodeKeyDown = (event: KeyboardEvent) => {
+    const handleDocumentKeyDown = (event: any) => {
       if (event.key === 'Escape') {
         dismissCallback();
       }
     };
 
-    const handleRootNodeClick: MouseEventHandler = event => {
+    const handleDocumentClick = (event: any) => {
       if (
         modalRef.current !== null &&
-        /* $FlowExpectedError[incompatible-call] Instead of dealing with possibly multiple realms
-         and multiple Node references to comply with Flow (e.g. checking with `event.target instanceof Node`)
-         just delegate it to contains call */
         !modalRef.current.contains(event.target)
       ) {
         event.stopPropagation();
@@ -240,23 +228,23 @@ export function useModalDismissSignal(
       }
     };
 
-    let modalRootNode = null;
+    let ownerDocument = null;
 
     // Delay until after the current call stack is empty,
     // in case this effect is being run while an event is currently bubbling.
     // In that case, we don't want to listen to the pre-existing event.
-    let timeoutID: null | TimeoutID = setTimeout(() => {
+    let timeoutID = setTimeout(() => {
       timeoutID = null;
 
       // It's important to listen to the ownerDocument to support the browser extension.
       // Here we use portals to render individual tabs (e.g. Profiler),
       // and the root document might belong to a different window.
-      const modalDOMElement = modalRef.current;
-      if (modalDOMElement != null) {
-        modalRootNode = modalDOMElement.getRootNode();
-        modalRootNode.addEventListener('keydown', handleRootNodeKeyDown);
+      const div = modalRef.current;
+      if (div != null) {
+        ownerDocument = div.ownerDocument;
+        ownerDocument.addEventListener('keydown', handleDocumentKeyDown);
         if (dismissOnClickOutside) {
-          modalRootNode.addEventListener('click', handleRootNodeClick, true);
+          ownerDocument.addEventListener('click', handleDocumentClick, true);
         }
       }
     }, 0);
@@ -266,9 +254,9 @@ export function useModalDismissSignal(
         clearTimeout(timeoutID);
       }
 
-      if (modalRootNode !== null) {
-        modalRootNode.removeEventListener('keydown', handleRootNodeKeyDown);
-        modalRootNode.removeEventListener('click', handleRootNodeClick, true);
+      if (ownerDocument !== null) {
+        ownerDocument.removeEventListener('keydown', handleDocumentKeyDown);
+        ownerDocument.removeEventListener('click', handleDocumentClick, true);
       }
     };
   }, [modalRef, dismissCallback, dismissOnClickOutside]);
@@ -278,10 +266,10 @@ export function useModalDismissSignal(
 export function useSubscription<Value>({
   getCurrentValue,
   subscribe,
-}: {
+}: {|
   getCurrentValue: () => Value,
   subscribe: (callback: Function) => () => void,
-}): Value {
+|}): Value {
   const [state, setState] = useState(() => ({
     getCurrentValue,
     subscribe,
@@ -336,10 +324,7 @@ export function useSubscription<Value>({
   return state.value;
 }
 
-export function useHighlightNativeElement(): {
-  clearHighlightNativeElement: () => void,
-  highlightNativeElement: (id: number) => void,
-} {
+export function useHighlightNativeElement() {
   const bridge = useContext(BridgeContext);
   const store = useContext(StoreContext);
 

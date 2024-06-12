@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -67,29 +67,6 @@ export default {
       context.report(problem);
     }
 
-    /**
-     * SourceCode#getText that also works down to ESLint 3.0.0
-     */
-    const getSource =
-      typeof context.getSource === 'function'
-        ? node => {
-            return context.getSource(node);
-          }
-        : node => {
-            return context.sourceCode.getText(node);
-          };
-    /**
-     * SourceCode#getScope that also works down to ESLint 3.0.0
-     */
-    const getScope =
-      typeof context.getScope === 'function'
-        ? () => {
-            return context.getScope();
-          }
-        : node => {
-            return context.sourceCode.getScope(node);
-          };
-
     const scopeManager = context.getSourceCode().scopeManager;
 
     // Should be shared between visitors.
@@ -97,9 +74,8 @@ export default {
     const stateVariables = new WeakSet();
     const stableKnownValueCache = new WeakMap();
     const functionWithoutCapturedValueCache = new WeakMap();
-    const useEffectEventVariables = new WeakSet();
     function memoizeWithWeakMap(fn, map) {
-      return function (arg) {
+      return function(arg) {
         if (map.has(arg)) {
           // to verify cache hits:
           // console.log(arg.name)
@@ -134,7 +110,7 @@ export default {
             '  }\n' +
             '  fetchData();\n' +
             `}, [someId]); // Or [] if effect doesn't need props or state\n\n` +
-            'Learn more about data fetching with Hooks: https://react.dev/link/hooks-data-fetching',
+            'Learn more about data fetching with Hooks: https://reactjs.org/link/hooks-data-fetching',
         });
       }
 
@@ -181,8 +157,6 @@ export default {
       //               ^^^ true for this reference
       // const ref = useRef()
       //       ^^^ true for this reference
-      // const onStuff = useEffectEvent(() => {})
-      //       ^^^ true for this reference
       // False for everything else.
       function isStableKnownHookValue(resolved) {
         if (!isArray(resolved.defs)) {
@@ -200,7 +174,7 @@ export default {
         if (init == null) {
           return false;
         }
-        while (init.type === 'TSAsExpression' || init.type === 'AsExpression') {
+        while (init.type === 'TSAsExpression') {
           init = init.expression;
         }
         // Detect primitive constants
@@ -248,17 +222,6 @@ export default {
         const {name} = callee;
         if (name === 'useRef' && id.type === 'Identifier') {
           // useRef() return value is stable.
-          return true;
-        } else if (
-          isUseEffectEventIdentifier(callee) &&
-          id.type === 'Identifier'
-        ) {
-          for (const ref of resolved.references) {
-            if (ref !== id) {
-              useEffectEventVariables.add(ref.identifier);
-            }
-          }
-          // useEffectEvent() return value is always unstable.
           return true;
         } else if (name === 'useState' || name === 'useReducer') {
           // Only consider second value in initializing tuple stable.
@@ -389,7 +352,7 @@ export default {
       const currentRefsInEffectCleanup = new Map();
 
       // Is this reference inside a cleanup function for this effect node?
-      // We can check by traversing scopes upwards from the reference, and checking
+      // We can check by traversing scopes upwards  from the reference, and checking
       // if the last "return () => " we encounter is located directly inside the effect.
       function isInsideEffectCleanup(reference) {
         let curScope = reference.from;
@@ -549,11 +512,11 @@ export default {
           node: writeExpr,
           message:
             `Assignments to the '${key}' variable from inside React Hook ` +
-            `${getSource(reactiveHook)} will be lost after each ` +
+            `${context.getSource(reactiveHook)} will be lost after each ` +
             `render. To preserve the value over time, store it in a useRef ` +
             `Hook and keep the mutable value in the '.current' property. ` +
             `Otherwise, you can move this variable directly inside ` +
-            `${getSource(reactiveHook)}.`,
+            `${context.getSource(reactiveHook)}.`,
         });
       }
 
@@ -641,29 +604,20 @@ export default {
 
       const declaredDependencies = [];
       const externalDependencies = new Set();
-      const isArrayExpression =
-        declaredDependenciesNode.type === 'ArrayExpression';
-      const isTSAsArrayExpression =
-        declaredDependenciesNode.type === 'TSAsExpression' &&
-        declaredDependenciesNode.expression.type === 'ArrayExpression';
-      if (!isArrayExpression && !isTSAsArrayExpression) {
+      if (declaredDependenciesNode.type !== 'ArrayExpression') {
         // If the declared dependencies are not an array expression then we
         // can't verify that the user provided the correct dependencies. Tell
         // the user this in an error.
         reportProblem({
           node: declaredDependenciesNode,
           message:
-            `React Hook ${getSource(reactiveHook)} was passed a ` +
+            `React Hook ${context.getSource(reactiveHook)} was passed a ` +
             'dependency list that is not an array literal. This means we ' +
             "can't statically verify whether you've passed the correct " +
             'dependencies.',
         });
       } else {
-        const arrayExpression = isTSAsArrayExpression
-          ? declaredDependenciesNode.expression
-          : declaredDependenciesNode;
-
-        arrayExpression.elements.forEach(declaredDependencyNode => {
+        declaredDependenciesNode.elements.forEach(declaredDependencyNode => {
           // Skip elided elements.
           if (declaredDependencyNode === null) {
             return;
@@ -673,32 +627,12 @@ export default {
             reportProblem({
               node: declaredDependencyNode,
               message:
-                `React Hook ${getSource(reactiveHook)} has a spread ` +
+                `React Hook ${context.getSource(reactiveHook)} has a spread ` +
                 "element in its dependency array. This means we can't " +
                 "statically verify whether you've passed the " +
                 'correct dependencies.',
             });
             return;
-          }
-          if (useEffectEventVariables.has(declaredDependencyNode)) {
-            reportProblem({
-              node: declaredDependencyNode,
-              message:
-                'Functions returned from `useEffectEvent` must not be included in the dependency array. ' +
-                `Remove \`${getSource(
-                  declaredDependencyNode,
-                )}\` from the list.`,
-              suggest: [
-                {
-                  desc: `Remove the dependency \`${getSource(
-                    declaredDependencyNode,
-                  )}\``,
-                  fix(fixer) {
-                    return fixer.removeRange(declaredDependencyNode.range);
-                  },
-                },
-              ],
-            });
           }
           // Try to normalize the declared dependency. If we can't then an error
           // will be thrown. We will catch that error and report an error.
@@ -731,7 +665,7 @@ export default {
                 reportProblem({
                   node: declaredDependencyNode,
                   message:
-                    `React Hook ${getSource(reactiveHook)} has a ` +
+                    `React Hook ${context.getSource(reactiveHook)} has a ` +
                     `complex expression in the dependency array. ` +
                     'Extract it to a separate variable so it can be statically checked.',
                 });
@@ -1001,7 +935,7 @@ export default {
             ` However, 'props' will change when *any* prop changes, so the ` +
             `preferred fix is to destructure the 'props' object outside of ` +
             `the ${reactiveHookName} call and refer to those specific props ` +
-            `inside ${getSource(reactiveHook)}.`;
+            `inside ${context.getSource(reactiveHook)}.`;
         }
       }
 
@@ -1135,7 +1069,7 @@ export default {
               extraWarning =
                 ` You can also do a functional update '${
                   setStateRecommendation.setter
-                }(${setStateRecommendation.missingDep.slice(
+                }(${setStateRecommendation.missingDep.substring(
                   0,
                   1,
                 )} => ...)' if you only need '${
@@ -1151,7 +1085,7 @@ export default {
       reportProblem({
         node: declaredDependenciesNode,
         message:
-          `React Hook ${getSource(reactiveHook)} has ` +
+          `React Hook ${context.getSource(reactiveHook)} has ` +
           // To avoid a long message, show the next actionable item.
           (getWarningMessage(missingDependencies, 'a', 'missing', 'include') ||
             getWarningMessage(
@@ -1193,12 +1127,7 @@ export default {
       const callback = node.arguments[callbackIndex];
       const reactiveHook = node.callee;
       const reactiveHookName = getNodeWithoutReactNamespace(reactiveHook).name;
-      const maybeNode = node.arguments[callbackIndex + 1];
-      const declaredDependenciesNode =
-        maybeNode &&
-        !(maybeNode.type === 'Identifier' && maybeNode.name === 'undefined')
-          ? maybeNode
-          : undefined;
+      const declaredDependenciesNode = node.arguments[callbackIndex + 1];
       const isEffect = /Effect($|[^a-z])/g.test(reactiveHookName);
 
       // Check whether a callback is supplied. If there is no callback supplied
@@ -1246,15 +1175,6 @@ export default {
             isEffect,
           );
           return; // Handled
-        case 'TSAsExpression':
-          visitFunctionWithDependencies(
-            callback.expression,
-            declaredDependenciesNode,
-            reactiveHook,
-            reactiveHookName,
-            isEffect,
-          );
-          return; // Handled
         case 'Identifier':
           if (!declaredDependenciesNode) {
             // No deps, no problems.
@@ -1273,7 +1193,7 @@ export default {
             return; // Handled
           }
           // We'll do our best effort to find it, complain otherwise.
-          const variable = getScope(callback).set.get(callback.name);
+          const variable = context.getScope().set.get(callback.name);
           if (variable == null || variable.defs == null) {
             // If it's not in scope, we don't care.
             return; // Handled
@@ -1566,7 +1486,7 @@ function getConstructionExpressionType(node) {
       }
       return null;
     case 'TypeCastExpression':
-    case 'AsExpression':
+      return getConstructionExpressionType(node.expression);
     case 'TSAsExpression':
       return getConstructionExpressionType(node.expression);
   }
@@ -1898,11 +1818,4 @@ function isSameIdentifier(a, b) {
 
 function isAncestorNodeOf(a, b) {
   return a.range[0] <= b.range[0] && a.range[1] >= b.range[1];
-}
-
-function isUseEffectEventIdentifier(node) {
-  if (__EXPERIMENTAL__) {
-    return node.type === 'Identifier' && node.name === 'useEffectEvent';
-  }
-  return false;
 }

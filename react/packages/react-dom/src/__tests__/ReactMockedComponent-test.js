@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -10,8 +10,7 @@
 'use strict';
 
 let React;
-let ReactDOMClient;
-let act;
+let ReactDOM;
 
 let MockedComponent;
 let ReactDOMServer;
@@ -19,9 +18,8 @@ let ReactDOMServer;
 describe('ReactMockedComponent', () => {
   beforeEach(() => {
     React = require('react');
-    ReactDOMClient = require('react-dom/client');
+    ReactDOM = require('react-dom');
     ReactDOMServer = require('react-dom/server');
-    act = require('internal-test-utils').act;
 
     MockedComponent = class extends React.Component {
       render() {
@@ -32,23 +30,15 @@ describe('ReactMockedComponent', () => {
     MockedComponent.prototype.render = jest.fn();
   });
 
-  it('should allow a mocked component to be rendered', async () => {
+  it('should allow a mocked component to be rendered', () => {
     const container = document.createElement('container');
-    const root = ReactDOMClient.createRoot(container);
-    await act(() => {
-      root.render(<MockedComponent />);
-    });
+    ReactDOM.render(<MockedComponent />, container);
   });
 
-  it('should allow a mocked component to be updated in dev', async () => {
+  it('should allow a mocked component to be updated in dev', () => {
     const container = document.createElement('container');
-    const root = ReactDOMClient.createRoot(container);
-    await act(() => {
-      root.render(<MockedComponent />);
-    });
-    await act(() => {
-      root.render(<MockedComponent />);
-    });
+    ReactDOM.render(<MockedComponent />, container);
+    ReactDOM.render(<MockedComponent />, container);
   });
 
   it('should allow a mocked component to be rendered in dev (SSR)', () => {

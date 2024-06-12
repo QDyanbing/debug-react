@@ -16,8 +16,11 @@ async function clickButton(page, buttonTestName) {
 
 async function getElementCount(page, displayName) {
   return await page.evaluate(listItemText => {
-    const {createTestNameSelector, createTextSelector, findAllNodes} =
-      window.REACT_DOM_DEVTOOLS;
+    const {
+      createTestNameSelector,
+      createTextSelector,
+      findAllNodes,
+    } = window.REACT_DOM_DEVTOOLS;
     const container = document.getElementById('devtools');
     const rows = findAllNodes(container, [
       createTestNameSelector('ComponentTreeListItem'),
@@ -29,26 +32,28 @@ async function getElementCount(page, displayName) {
 
 async function selectElement(page, displayName, waitForOwnersText) {
   await page.evaluate(listItemText => {
-    const {createTestNameSelector, createTextSelector, findAllNodes} =
-      window.REACT_DOM_DEVTOOLS;
+    const {
+      createTestNameSelector,
+      createTextSelector,
+      findAllNodes,
+    } = window.REACT_DOM_DEVTOOLS;
     const container = document.getElementById('devtools');
 
     const listItem = findAllNodes(container, [
       createTestNameSelector('ComponentTreeListItem'),
       createTextSelector(listItemText),
     ])[0];
-
-    listItem.dispatchEvent(
-      new MouseEvent('mousedown', {bubbles: true, cancelable: true})
-    );
+    listItem.click();
   }, displayName);
 
   if (waitForOwnersText) {
     // Wait for selected element's props to load.
     await page.waitForFunction(
       ({titleText, ownersListText}) => {
-        const {createTestNameSelector, findAllNodes} =
-          window.REACT_DOM_DEVTOOLS;
+        const {
+          createTestNameSelector,
+          findAllNodes,
+        } = window.REACT_DOM_DEVTOOLS;
         const container = document.getElementById('devtools');
 
         const title = findAllNodes(container, [

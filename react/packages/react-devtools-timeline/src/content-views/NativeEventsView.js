@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -65,7 +65,7 @@ export class NativeEventsView extends View {
       if (!this._depthToNativeEvent.has(depth)) {
         this._depthToNativeEvent.set(depth, [event]);
       } else {
-        // $FlowFixMe[incompatible-use] This is unnecessary.
+        // $FlowFixMe This is unnecessary.
         this._depthToNativeEvent.get(depth).push(event);
       }
     });
@@ -77,7 +77,7 @@ export class NativeEventsView extends View {
     };
   }
 
-  desiredSize(): IntrinsicSize {
+  desiredSize() {
     return this._intrinsicSize;
   }
 

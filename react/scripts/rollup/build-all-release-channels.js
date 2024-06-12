@@ -7,13 +7,12 @@ const fse = require('fs-extra');
 const {spawnSync} = require('child_process');
 const path = require('path');
 const tmp = require('tmp');
-const shell = require('shelljs');
+
 const {
   ReactVersion,
   stablePackages,
   experimentalPackages,
-  canaryChannelLabel,
-  rcNumber,
+  nextChannelLabel,
 } = require('../../ReactVersions');
 
 // Runs the build script for both stable and experimental release channels,
@@ -36,7 +35,7 @@ let dateString = String(
 
 // On CI environment, this string is wrapped with quotes '...'s
 if (dateString.startsWith("'")) {
-  dateString = dateString.slice(1, 9);
+  dateString = dateString.substr(1, 8);
 }
 
 // Build the artifacts using a placeholder React version. We'll then do a string
@@ -44,7 +43,7 @@ if (dateString.startsWith("'")) {
 //
 // The placeholder version is the same format that the "next" channel uses
 const PLACEHOLDER_REACT_VERSION =
-  ReactVersion + '-' + canaryChannelLabel + '-' + sha + '-' + dateString;
+  ReactVersion + '-' + nextChannelLabel + '-' + sha + '-' + dateString;
 
 // TODO: We should inject the React version using a build-time parameter
 // instead of overwriting the source files.
@@ -94,38 +93,26 @@ if (process.env.CIRCLE_NODE_TOTAL) {
 }
 
 function buildForChannel(channel, nodeTotal, nodeIndex) {
-  const {status} = spawnSync(
-    'node',
-    ['./scripts/rollup/build.js', ...process.argv.slice(2)],
-    {
-      stdio: ['pipe', process.stdout, process.stderr],
-      env: {
-        ...process.env,
-        RELEASE_CHANNEL: channel,
-        CIRCLE_NODE_TOTAL: nodeTotal,
-        CIRCLE_NODE_INDEX: nodeIndex,
-      },
-    }
-  );
-
-  if (status !== 0) {
-    // Error of spawned process is already piped to this stderr
-    process.exit(status);
-  }
+  spawnSync('node', ['./scripts/rollup/build.js', ...process.argv.slice(2)], {
+    stdio: ['pipe', process.stdout, process.stderr],
+    env: {
+      ...process.env,
+      RELEASE_CHANNEL: channel,
+      CIRCLE_NODE_TOTAL: nodeTotal,
+      CIRCLE_NODE_INDEX: nodeIndex,
+    },
+  });
 }
 
 function processStable(buildDir) {
   if (fs.existsSync(buildDir + '/node_modules')) {
     // Identical to `oss-stable` but with real, semver versions. This is what
     // will get published to @latest.
-    shell.cp('-r', buildDir + '/node_modules', buildDir + '/oss-stable-semver');
-    if (canaryChannelLabel === 'rc') {
-      // During the RC phase, we also generate an RC build that pins to exact
-      // versions but does not include a SHA, e.g. `19.0.0-rc.0`. This is purely
-      // for signaling purposes — aside from the version, it's no different from
-      // the corresponding canary.
-      shell.cp('-r', buildDir + '/node_modules', buildDir + '/oss-stable-rc');
-    }
+    spawnSync('cp', [
+      '-r',
+      buildDir + '/node_modules',
+      buildDir + '/oss-stable-semver',
+    ]);
 
     const defaultVersionIfNotFound = '0.0.0' + '-' + sha + '-' + dateString;
     const versionsMap = new Map();
@@ -133,7 +120,7 @@ function processStable(buildDir) {
       const version = stablePackages[moduleName];
       versionsMap.set(
         moduleName,
-        version + '-' + canaryChannelLabel + '-' + sha + '-' + dateString,
+        version + '-' + nextChannelLabel + '-' + sha + '-' + dateString,
         defaultVersionIfNotFound
       );
     }
@@ -146,43 +133,8 @@ function processStable(buildDir) {
     fs.renameSync(buildDir + '/node_modules', buildDir + '/oss-stable');
     updatePlaceholderReactVersionInCompiledArtifacts(
       buildDir + '/oss-stable',
-      ReactVersion + '-' + canaryChannelLabel + '-' + sha + '-' + dateString
+      ReactVersion + '-' + nextChannelLabel + '-' + sha + '-' + dateString
     );
-
-    if (canaryChannelLabel === 'rc') {
-      const rcVersionsMap = new Map();
-      for (const moduleName in stablePackages) {
-        const version = stablePackages[moduleName];
-        rcVersionsMap.set(moduleName, version + `-rc.${rcNumber}`);
-      }
-      updatePackageVersions(
-        buildDir + '/oss-stable-rc',
-        rcVersionsMap,
-        defaultVersionIfNotFound,
-        // For RCs, we pin to exact versions, like we do for canaries.
-        true
-      );
-      updatePlaceholderReactVersionInCompiledArtifacts(
-        buildDir + '/oss-stable-rc',
-        ReactVersion
-      );
-    }
-
-    const rnVersionString =
-      ReactVersion + '-native-fb-' + sha + '-' + dateString;
-    if (fs.existsSync(buildDir + '/facebook-react-native')) {
-      updatePlaceholderReactVersionInCompiledArtifacts(
-        buildDir + '/facebook-react-native',
-        rnVersionString
-      );
-    }
-
-    if (fs.existsSync(buildDir + '/react-native')) {
-      updatePlaceholderReactVersionInCompiledArtifactsFb(
-        buildDir + '/react-native',
-        rnVersionString
-      );
-    }
 
     // Now do the semver ones
     const semverVersionsMap = new Map();
@@ -194,7 +146,6 @@ function processStable(buildDir) {
       buildDir + '/oss-stable-semver',
       semverVersionsMap,
       defaultVersionIfNotFound,
-      // Use ^ only for non-prerelease versions
       false
     );
     updatePlaceholderReactVersionInCompiledArtifacts(
@@ -211,14 +162,10 @@ function processStable(buildDir) {
         fs.renameSync(filePath, filePath.replace('.js', '.classic.js'));
       }
     }
-    const versionString =
-      ReactVersion + '-www-classic-' + sha + '-' + dateString;
     updatePlaceholderReactVersionInCompiledArtifacts(
       buildDir + '/facebook-www',
-      versionString
+      ReactVersion + '-www-classic-' + sha + '-' + dateString
     );
-    // Also save a file with the version number
-    fs.writeFileSync(buildDir + '/facebook-www/VERSION_CLASSIC', versionString);
   }
 
   if (fs.existsSync(buildDir + '/sizes')) {
@@ -261,35 +208,9 @@ function processExperimental(buildDir, version) {
         fs.renameSync(filePath, filePath.replace('.js', '.modern.js'));
       }
     }
-    const versionString =
-      ReactVersion + '-www-modern-' + sha + '-' + dateString;
     updatePlaceholderReactVersionInCompiledArtifacts(
       buildDir + '/facebook-www',
-      versionString
-    );
-
-    // Also save a file with the version number
-    fs.writeFileSync(buildDir + '/facebook-www/VERSION_MODERN', versionString);
-  }
-
-  const rnVersionString = ReactVersion + '-native-fb-' + sha + '-' + dateString;
-  if (fs.existsSync(buildDir + '/facebook-react-native')) {
-    updatePlaceholderReactVersionInCompiledArtifacts(
-      buildDir + '/facebook-react-native',
-      rnVersionString
-    );
-
-    // Also save a file with the version number
-    fs.writeFileSync(
-      buildDir + '/facebook-react-native/VERSION_NATIVE_FB',
-      rnVersionString
-    );
-  }
-
-  if (fs.existsSync(buildDir + '/react-native')) {
-    updatePlaceholderReactVersionInCompiledArtifactsFb(
-      buildDir + '/react-native',
-      rnVersionString
+      ReactVersion + '-www-modern-' + sha + '-' + dateString
     );
   }
 
@@ -402,35 +323,7 @@ function updatePlaceholderReactVersionInCompiledArtifacts(
 
   for (const artifactFilename of artifactFilenames) {
     const originalText = fs.readFileSync(artifactFilename, 'utf8');
-    const replacedText = originalText.replaceAll(
-      PLACEHOLDER_REACT_VERSION,
-      newVersion
-    );
-    fs.writeFileSync(artifactFilename, replacedText);
-  }
-}
-
-function updatePlaceholderReactVersionInCompiledArtifactsFb(
-  artifactsDirectory,
-  newVersion
-) {
-  // Update the version of React in the compiled artifacts by searching for
-  // the placeholder string and replacing it with a new one.
-  const artifactFilenames = String(
-    spawnSync('grep', [
-      '-lr',
-      PLACEHOLDER_REACT_VERSION,
-      '--',
-      artifactsDirectory,
-    ]).stdout
-  )
-    .trim()
-    .split('\n')
-    .filter(filename => filename.endsWith('.fb.js'));
-
-  for (const artifactFilename of artifactFilenames) {
-    const originalText = fs.readFileSync(artifactFilename, 'utf8');
-    const replacedText = originalText.replaceAll(
+    const replacedText = originalText.replace(
       PLACEHOLDER_REACT_VERSION,
       newVersion
     );

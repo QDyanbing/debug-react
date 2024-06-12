@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -14,11 +14,11 @@ describe('React hooks DevTools integration', () => {
   let React;
   let ReactDebugTools;
   let ReactTestRenderer;
+  let Scheduler;
   let act;
   let overrideHookState;
   let scheduleUpdate;
   let setSuspenseHandler;
-  let waitForAll;
 
   global.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -39,14 +39,12 @@ describe('React hooks DevTools integration', () => {
     React = require('react');
     ReactDebugTools = require('react-debug-tools');
     ReactTestRenderer = require('react-test-renderer');
+    Scheduler = require('scheduler');
 
-    const InternalTestUtils = require('internal-test-utils');
-    waitForAll = InternalTestUtils.waitForAll;
-
-    act = require('internal-test-utils').act;
+    act = ReactTestRenderer.act;
   });
 
-  it('should support editing useState hooks', async () => {
+  it('should support editing useState hooks', () => {
     let setCountFn;
 
     function MyComponent() {
@@ -55,12 +53,7 @@ describe('React hooks DevTools integration', () => {
       return <div>count:{count}</div>;
     }
 
-    let renderer;
-    await act(() => {
-      renderer = ReactTestRenderer.create(<MyComponent />, {
-        unstable_isConcurrent: true,
-      });
-    });
+    const renderer = ReactTestRenderer.create(<MyComponent />);
     expect(renderer.toJSON()).toEqual({
       type: 'div',
       props: {},
@@ -73,14 +66,14 @@ describe('React hooks DevTools integration', () => {
     expect(stateHook.isStateEditable).toBe(true);
 
     if (__DEV__) {
-      await act(() => overrideHookState(fiber, stateHook.id, [], 10));
+      act(() => overrideHookState(fiber, stateHook.id, [], 10));
       expect(renderer.toJSON()).toEqual({
         type: 'div',
         props: {},
         children: ['count:', '10'],
       });
 
-      await act(() => setCountFn(count => count + 1));
+      act(() => setCountFn(count => count + 1));
       expect(renderer.toJSON()).toEqual({
         type: 'div',
         props: {},
@@ -89,7 +82,7 @@ describe('React hooks DevTools integration', () => {
     }
   });
 
-  it('should support editable useReducer hooks', async () => {
+  it('should support editable useReducer hooks', () => {
     const initialData = {foo: 'abc', bar: 123};
 
     function reducer(state, action) {
@@ -112,12 +105,7 @@ describe('React hooks DevTools integration', () => {
       );
     }
 
-    let renderer;
-    await act(() => {
-      renderer = ReactTestRenderer.create(<MyComponent />, {
-        unstable_isConcurrent: true,
-      });
-    });
+    const renderer = ReactTestRenderer.create(<MyComponent />);
     expect(renderer.toJSON()).toEqual({
       type: 'div',
       props: {},
@@ -130,14 +118,14 @@ describe('React hooks DevTools integration', () => {
     expect(reducerHook.isStateEditable).toBe(true);
 
     if (__DEV__) {
-      await act(() => overrideHookState(fiber, reducerHook.id, ['foo'], 'def'));
+      act(() => overrideHookState(fiber, reducerHook.id, ['foo'], 'def'));
       expect(renderer.toJSON()).toEqual({
         type: 'div',
         props: {},
         children: ['foo:', 'def', ', bar:', '123'],
       });
 
-      await act(() => dispatchFn({type: 'swap'}));
+      act(() => dispatchFn({type: 'swap'}));
       expect(renderer.toJSON()).toEqual({
         type: 'div',
         props: {},
@@ -148,7 +136,7 @@ describe('React hooks DevTools integration', () => {
 
   // This test case is based on an open source bug report:
   // https://github.com/facebookincubator/redux-react-hook/issues/34#issuecomment-466693787
-  it('should handle interleaved stateful hooks (e.g. useState) and non-stateful hooks (e.g. useContext)', async () => {
+  it('should handle interleaved stateful hooks (e.g. useState) and non-stateful hooks (e.g. useContext)', () => {
     const MyContext = React.createContext(1);
 
     let setStateFn;
@@ -165,12 +153,7 @@ describe('React hooks DevTools integration', () => {
       return <div>count:{count}</div>;
     }
 
-    let renderer;
-    await act(() => {
-      renderer = ReactTestRenderer.create(<MyComponent />, {
-        unstable_isConcurrent: true,
-      });
-    });
+    const renderer = ReactTestRenderer.create(<MyComponent />);
     expect(renderer.toJSON()).toEqual({
       type: 'div',
       props: {},
@@ -183,13 +166,13 @@ describe('React hooks DevTools integration', () => {
     expect(stateHook.isStateEditable).toBe(true);
 
     if (__DEV__) {
-      await act(() => overrideHookState(fiber, stateHook.id, ['count'], 10));
+      act(() => overrideHookState(fiber, stateHook.id, ['count'], 10));
       expect(renderer.toJSON()).toEqual({
         type: 'div',
         props: {},
         children: ['count:', '10'],
       });
-      await act(() => setStateFn(state => ({count: state.count + 1})));
+      act(() => setStateFn(state => ({count: state.count + 1})));
       expect(renderer.toJSON()).toEqual({
         type: 'div',
         props: {},
@@ -198,7 +181,7 @@ describe('React hooks DevTools integration', () => {
     }
   });
 
-  it('should support overriding suspense in legacy mode', async () => {
+  it('should support overriding suspense in legacy mode', () => {
     if (__DEV__) {
       // Lock the first render
       setSuspenseHandler(() => true);
@@ -207,53 +190,51 @@ describe('React hooks DevTools integration', () => {
     function MyComponent() {
       return 'Done';
     }
-    let renderer;
-    await act(() => {
-      renderer = ReactTestRenderer.create(
-        <div>
-          <React.Suspense fallback={'Loading'}>
-            <MyComponent />
-          </React.Suspense>
-        </div>,
-        {unstable_isConcurrent: true},
-      );
-    });
+
+    const renderer = ReactTestRenderer.create(
+      <div>
+        <React.Suspense fallback={'Loading'}>
+          <MyComponent />
+        </React.Suspense>
+      </div>,
+    );
     const fiber = renderer.root._currentFiber().child;
     if (__DEV__) {
       // First render was locked
       expect(renderer.toJSON().children).toEqual(['Loading']);
-      await act(() => scheduleUpdate(fiber)); // Re-render
+      act(() => scheduleUpdate(fiber)); // Re-render
       expect(renderer.toJSON().children).toEqual(['Loading']);
 
       // Release the lock
       setSuspenseHandler(() => false);
-      await act(() => scheduleUpdate(fiber)); // Re-render
+      act(() => scheduleUpdate(fiber)); // Re-render
       expect(renderer.toJSON().children).toEqual(['Done']);
-      await act(() => scheduleUpdate(fiber)); // Re-render
+      act(() => scheduleUpdate(fiber)); // Re-render
       expect(renderer.toJSON().children).toEqual(['Done']);
 
       // Lock again
       setSuspenseHandler(() => true);
-      await act(() => scheduleUpdate(fiber)); // Re-render
+      act(() => scheduleUpdate(fiber)); // Re-render
       expect(renderer.toJSON().children).toEqual(['Loading']);
 
       // Release the lock again
       setSuspenseHandler(() => false);
-      await act(() => scheduleUpdate(fiber)); // Re-render
+      act(() => scheduleUpdate(fiber)); // Re-render
       expect(renderer.toJSON().children).toEqual(['Done']);
 
       // Ensure it checks specific fibers.
       setSuspenseHandler(f => f === fiber || f === fiber.alternate);
-      await act(() => scheduleUpdate(fiber)); // Re-render
+      act(() => scheduleUpdate(fiber)); // Re-render
       expect(renderer.toJSON().children).toEqual(['Loading']);
       setSuspenseHandler(f => f !== fiber && f !== fiber.alternate);
-      await act(() => scheduleUpdate(fiber)); // Re-render
+      act(() => scheduleUpdate(fiber)); // Re-render
       expect(renderer.toJSON().children).toEqual(['Done']);
     } else {
       expect(renderer.toJSON().children).toEqual(['Done']);
     }
   });
 
+  // @gate __DEV__
   it('should support overriding suspense in concurrent mode', async () => {
     if (__DEV__) {
       // Lock the first render
@@ -275,39 +256,40 @@ describe('React hooks DevTools integration', () => {
       ),
     );
 
-    await waitForAll([]);
+    expect(Scheduler).toFlushAndYield([]);
     // Ensure we timeout any suspense time.
     jest.advanceTimersByTime(1000);
     const fiber = renderer.root._currentFiber().child;
     if (__DEV__) {
       // First render was locked
       expect(renderer.toJSON().children).toEqual(['Loading']);
-      await act(() => scheduleUpdate(fiber)); // Re-render
+      act(() => scheduleUpdate(fiber)); // Re-render
       expect(renderer.toJSON().children).toEqual(['Loading']);
 
       // Release the lock
       setSuspenseHandler(() => false);
-      await act(() => scheduleUpdate(fiber)); // Re-render
+      act(() => scheduleUpdate(fiber)); // Re-render
+      Scheduler.unstable_flushAll();
       expect(renderer.toJSON().children).toEqual(['Done']);
-      await act(() => scheduleUpdate(fiber)); // Re-render
+      act(() => scheduleUpdate(fiber)); // Re-render
       expect(renderer.toJSON().children).toEqual(['Done']);
 
       // Lock again
       setSuspenseHandler(() => true);
-      await act(() => scheduleUpdate(fiber)); // Re-render
+      act(() => scheduleUpdate(fiber)); // Re-render
       expect(renderer.toJSON().children).toEqual(['Loading']);
 
       // Release the lock again
       setSuspenseHandler(() => false);
-      await act(() => scheduleUpdate(fiber)); // Re-render
+      act(() => scheduleUpdate(fiber)); // Re-render
       expect(renderer.toJSON().children).toEqual(['Done']);
 
       // Ensure it checks specific fibers.
       setSuspenseHandler(f => f === fiber || f === fiber.alternate);
-      await act(() => scheduleUpdate(fiber)); // Re-render
+      act(() => scheduleUpdate(fiber)); // Re-render
       expect(renderer.toJSON().children).toEqual(['Loading']);
       setSuspenseHandler(f => f !== fiber && f !== fiber.alternate);
-      await act(() => scheduleUpdate(fiber)); // Re-render
+      act(() => scheduleUpdate(fiber)); // Re-render
       expect(renderer.toJSON().children).toEqual(['Done']);
     } else {
       expect(renderer.toJSON().children).toEqual(['Done']);

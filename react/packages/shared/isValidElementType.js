@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -9,11 +9,10 @@
 
 import {
   REACT_CONTEXT_TYPE,
-  REACT_CONSUMER_TYPE,
-  REACT_PROVIDER_TYPE,
   REACT_FORWARD_REF_TYPE,
   REACT_FRAGMENT_TYPE,
   REACT_PROFILER_TYPE,
+  REACT_PROVIDER_TYPE,
   REACT_DEBUG_TRACING_MODE_TYPE,
   REACT_STRICT_MODE_TYPE,
   REACT_SUSPENSE_TYPE,
@@ -23,21 +22,30 @@ import {
   REACT_SCOPE_TYPE,
   REACT_LEGACY_HIDDEN_TYPE,
   REACT_OFFSCREEN_TYPE,
+  REACT_CACHE_TYPE,
   REACT_TRACING_MARKER_TYPE,
 } from 'shared/ReactSymbols';
 import {
   enableScopeAPI,
+  enableCacheElement,
   enableTransitionTracing,
   enableDebugTracing,
   enableLegacyHidden,
-  enableRenderableContext,
+  enableSymbolFallbackForWWW,
 } from './ReactFeatureFlags';
 
-const REACT_CLIENT_REFERENCE: symbol = Symbol.for('react.client.reference');
+let REACT_MODULE_REFERENCE;
+if (enableSymbolFallbackForWWW) {
+  if (typeof Symbol === 'function') {
+    REACT_MODULE_REFERENCE = Symbol.for('react.module.reference');
+  } else {
+    REACT_MODULE_REFERENCE = 0;
+  }
+} else {
+  REACT_MODULE_REFERENCE = Symbol.for('react.module.reference');
+}
 
-// This function is deprecated. Don't use. Only the renderer knows what a valid type is.
-// TODO: Delete this when enableOwnerStacks ships.
-export default function isValidElementType(type: mixed): boolean {
+export default function isValidElementType(type: mixed) {
   if (typeof type === 'string' || typeof type === 'function') {
     return true;
   }
@@ -53,6 +61,7 @@ export default function isValidElementType(type: mixed): boolean {
     (enableLegacyHidden && type === REACT_LEGACY_HIDDEN_TYPE) ||
     type === REACT_OFFSCREEN_TYPE ||
     (enableScopeAPI && type === REACT_SCOPE_TYPE) ||
+    (enableCacheElement && type === REACT_CACHE_TYPE) ||
     (enableTransitionTracing && type === REACT_TRACING_MARKER_TYPE)
   ) {
     return true;
@@ -62,15 +71,14 @@ export default function isValidElementType(type: mixed): boolean {
     if (
       type.$$typeof === REACT_LAZY_TYPE ||
       type.$$typeof === REACT_MEMO_TYPE ||
+      type.$$typeof === REACT_PROVIDER_TYPE ||
       type.$$typeof === REACT_CONTEXT_TYPE ||
-      (!enableRenderableContext && type.$$typeof === REACT_PROVIDER_TYPE) ||
-      (enableRenderableContext && type.$$typeof === REACT_CONSUMER_TYPE) ||
       type.$$typeof === REACT_FORWARD_REF_TYPE ||
       // This needs to include all possible module reference object
       // types supported by any Flight configuration anywhere since
       // we don't know which Flight build this will end up being used
       // with.
-      type.$$typeof === REACT_CLIENT_REFERENCE ||
+      type.$$typeof === REACT_MODULE_REFERENCE ||
       type.getModuleId !== undefined
     ) {
       return true;

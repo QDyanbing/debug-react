@@ -11,9 +11,10 @@
   padding: 0.5rem;
   user-select: none;
   overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+}
+
+.WhatChanged {
+  margin-bottom: 1rem;
 }
 
 .Component {

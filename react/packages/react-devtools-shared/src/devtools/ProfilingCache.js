@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -33,20 +33,26 @@ export default class ProfilingCache {
     this._profilerStore = profilerStore;
   }
 
-  getCommitTree: ({commitIndex: number, rootID: number}) => CommitTree = ({
+  getCommitTree = ({
     commitIndex,
     rootID,
-  }) =>
+  }: {|
+    commitIndex: number,
+    rootID: number,
+  |}) =>
     getCommitTree({
       commitIndex,
       profilerStore: this._profilerStore,
       rootID,
     });
 
-  getFiberCommits: ({fiberID: number, rootID: number}) => Array<number> = ({
+  getFiberCommits = ({
     fiberID,
     rootID,
-  }) => {
+  }: {|
+    fiberID: number,
+    rootID: number,
+  |}): Array<number> => {
     const cachedFiberCommits = this._fiberCommits.get(fiberID);
     if (cachedFiberCommits != null) {
       return cachedFiberCommits;
@@ -65,11 +71,15 @@ export default class ProfilingCache {
     return fiberCommits;
   };
 
-  getFlamegraphChartData: ({
+  getFlamegraphChartData = ({
+    commitIndex,
+    commitTree,
+    rootID,
+  }: {|
     commitIndex: number,
     commitTree: CommitTree,
     rootID: number,
-  }) => FlamegraphChartData = ({commitIndex, commitTree, rootID}) =>
+  |}): FlamegraphChartData =>
     getFlamegraphChartData({
       commitIndex,
       commitTree,
@@ -77,11 +87,15 @@ export default class ProfilingCache {
       rootID,
     });
 
-  getRankedChartData: ({
+  getRankedChartData = ({
+    commitIndex,
+    commitTree,
+    rootID,
+  }: {|
     commitIndex: number,
     commitTree: CommitTree,
     rootID: number,
-  }) => RankedChartData = ({commitIndex, commitTree, rootID}) =>
+  |}): RankedChartData =>
     getRankedChartData({
       commitIndex,
       commitTree,

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -10,30 +10,30 @@
 'use strict';
 
 let React;
-let ReactDOMClient;
-let act;
+let ReactDOM;
+let ReactTestUtils;
 
 let idCallOrder;
-const recordID = function (id) {
+const recordID = function(id) {
   idCallOrder.push(id);
 };
-const recordIDAndStopPropagation = function (id, event) {
+const recordIDAndStopPropagation = function(id, event) {
   recordID(id);
   event.stopPropagation();
 };
-const recordIDAndReturnFalse = function (id, event) {
+const recordIDAndReturnFalse = function(id, event) {
   recordID(id);
   return false;
 };
 const LISTENER = jest.fn();
 const ON_CLICK_KEY = 'onClick';
+const ON_MOUSE_ENTER_KEY = 'onMouseEnter';
 
 let GRANDPARENT;
 let PARENT;
 let CHILD;
 let BUTTON;
 
-let renderTree;
 let putListener;
 let deleteAllListeners;
 
@@ -47,8 +47,9 @@ describe('ReactBrowserEventEmitter', () => {
     LISTENER.mockClear();
 
     React = require('react');
-    ReactDOMClient = require('react-dom/client');
-    act = require('internal-test-utils').act;
+    ReactDOM = require('react-dom');
+    ReactTestUtils = require('react-dom/test-utils');
+
     container = document.createElement('div');
     document.body.appendChild(container);
 
@@ -67,26 +68,21 @@ describe('ReactBrowserEventEmitter', () => {
       }
     }
 
-    const root = ReactDOMClient.createRoot(container);
+    function renderTree() {
+      ReactDOM.render(
+        <div ref={c => (GRANDPARENT = c)} {...GRANDPARENT_PROPS}>
+          <div ref={c => (PARENT = c)} {...PARENT_PROPS}>
+            <ChildWrapper {...CHILD_PROPS} />
+            <button disabled={true} ref={c => (BUTTON = c)} {...BUTTON_PROPS} />
+          </div>
+        </div>,
+        container,
+      );
+    }
 
-    renderTree = async function () {
-      await act(() => {
-        root.render(
-          <div ref={c => (GRANDPARENT = c)} {...GRANDPARENT_PROPS}>
-            <div ref={c => (PARENT = c)} {...PARENT_PROPS}>
-              <ChildWrapper {...CHILD_PROPS} />
-              <button
-                disabled={true}
-                ref={c => (BUTTON = c)}
-                {...BUTTON_PROPS}
-              />
-            </div>
-          </div>,
-        );
-      });
-    };
+    renderTree();
 
-    putListener = async function (node, eventName, listener) {
+    putListener = function(node, eventName, listener) {
       switch (node) {
         case CHILD:
           CHILD_PROPS[eventName] = listener;
@@ -102,10 +98,9 @@ describe('ReactBrowserEventEmitter', () => {
           break;
       }
       // Rerender with new event listeners
-      await renderTree();
+      renderTree();
     };
-
-    deleteAllListeners = async function (node) {
+    deleteAllListeners = function(node) {
       switch (node) {
         case CHILD:
           CHILD_PROPS = {};
@@ -120,7 +115,7 @@ describe('ReactBrowserEventEmitter', () => {
           BUTTON_PROPS = {};
           break;
       }
-      await renderTree();
+      renderTree();
     };
 
     idCallOrder = [];
@@ -131,189 +126,120 @@ describe('ReactBrowserEventEmitter', () => {
     container = null;
   });
 
-  it('should bubble simply', async () => {
-    await renderTree();
-    await putListener(CHILD, ON_CLICK_KEY, recordID.bind(null, CHILD));
-    await putListener(PARENT, ON_CLICK_KEY, recordID.bind(null, PARENT));
-    await putListener(
-      GRANDPARENT,
-      ON_CLICK_KEY,
-      recordID.bind(null, GRANDPARENT),
-    );
-    await act(() => {
-      CHILD.click();
-    });
+  it('should bubble simply', () => {
+    putListener(CHILD, ON_CLICK_KEY, recordID.bind(null, CHILD));
+    putListener(PARENT, ON_CLICK_KEY, recordID.bind(null, PARENT));
+    putListener(GRANDPARENT, ON_CLICK_KEY, recordID.bind(null, GRANDPARENT));
+    CHILD.click();
     expect(idCallOrder.length).toBe(3);
     expect(idCallOrder[0]).toBe(CHILD);
     expect(idCallOrder[1]).toBe(PARENT);
     expect(idCallOrder[2]).toBe(GRANDPARENT);
   });
 
-  it('should bubble to the right handler after an update', async () => {
-    await renderTree();
-    await putListener(
-      GRANDPARENT,
-      ON_CLICK_KEY,
-      recordID.bind(null, 'GRANDPARENT'),
-    );
-    await putListener(PARENT, ON_CLICK_KEY, recordID.bind(null, 'PARENT'));
-    await putListener(CHILD, ON_CLICK_KEY, recordID.bind(null, 'CHILD'));
-    await act(() => {
-      CHILD.click();
-    });
+  it('should bubble to the right handler after an update', () => {
+    putListener(GRANDPARENT, ON_CLICK_KEY, recordID.bind(null, 'GRANDPARENT'));
+    putListener(PARENT, ON_CLICK_KEY, recordID.bind(null, 'PARENT'));
+    putListener(CHILD, ON_CLICK_KEY, recordID.bind(null, 'CHILD'));
+    CHILD.click();
     expect(idCallOrder).toEqual(['CHILD', 'PARENT', 'GRANDPARENT']);
 
     idCallOrder = [];
 
     // Update just the grand parent without updating the child.
-    await putListener(
+    putListener(
       GRANDPARENT,
       ON_CLICK_KEY,
       recordID.bind(null, 'UPDATED_GRANDPARENT'),
     );
 
-    await act(() => {
-      CHILD.click();
-    });
+    CHILD.click();
     expect(idCallOrder).toEqual(['CHILD', 'PARENT', 'UPDATED_GRANDPARENT']);
   });
 
-  it('should continue bubbling if an error is thrown', async () => {
-    await renderTree();
-    await putListener(CHILD, ON_CLICK_KEY, recordID.bind(null, CHILD));
-    await putListener(PARENT, ON_CLICK_KEY, function (event) {
+  it('should continue bubbling if an error is thrown', () => {
+    putListener(CHILD, ON_CLICK_KEY, recordID.bind(null, CHILD));
+    putListener(PARENT, ON_CLICK_KEY, function() {
       recordID(PARENT);
       throw new Error('Handler interrupted');
     });
-    await putListener(
-      GRANDPARENT,
-      ON_CLICK_KEY,
-      recordID.bind(null, GRANDPARENT),
-    );
-    const errorHandler = jest.fn(event => {
-      event.preventDefault();
-    });
-    window.addEventListener('error', errorHandler);
-    try {
-      CHILD.click();
-      expect(idCallOrder.length).toBe(3);
-      expect(idCallOrder[0]).toBe(CHILD);
-      expect(idCallOrder[1]).toBe(PARENT);
-      expect(idCallOrder[2]).toBe(GRANDPARENT);
-      expect(errorHandler).toHaveBeenCalledTimes(1);
-      expect(errorHandler.mock.calls[0][0]).toEqual(
-        expect.objectContaining({
-          error: expect.any(Error),
-          message: 'Handler interrupted',
-        }),
-      );
-    } finally {
-      window.removeEventListener('error', errorHandler);
-    }
-  });
-
-  it('should set currentTarget', async () => {
-    await renderTree();
-    await putListener(CHILD, ON_CLICK_KEY, function (event) {
-      recordID(CHILD);
-      expect(event.currentTarget).toBe(CHILD);
-    });
-    await putListener(PARENT, ON_CLICK_KEY, function (event) {
-      recordID(PARENT);
-      expect(event.currentTarget).toBe(PARENT);
-    });
-    await putListener(GRANDPARENT, ON_CLICK_KEY, function (event) {
-      recordID(GRANDPARENT);
-      expect(event.currentTarget).toBe(GRANDPARENT);
-    });
-    await act(() => {
-      CHILD.click();
-    });
+    putListener(GRANDPARENT, ON_CLICK_KEY, recordID.bind(null, GRANDPARENT));
+    expect(function() {
+      ReactTestUtils.Simulate.click(CHILD);
+    }).toThrow();
     expect(idCallOrder.length).toBe(3);
     expect(idCallOrder[0]).toBe(CHILD);
     expect(idCallOrder[1]).toBe(PARENT);
     expect(idCallOrder[2]).toBe(GRANDPARENT);
   });
 
-  it('should support stopPropagation()', async () => {
-    await renderTree();
-    await putListener(CHILD, ON_CLICK_KEY, recordID.bind(null, CHILD));
-    await putListener(
+  it('should set currentTarget', () => {
+    putListener(CHILD, ON_CLICK_KEY, function(event) {
+      recordID(CHILD);
+      expect(event.currentTarget).toBe(CHILD);
+    });
+    putListener(PARENT, ON_CLICK_KEY, function(event) {
+      recordID(PARENT);
+      expect(event.currentTarget).toBe(PARENT);
+    });
+    putListener(GRANDPARENT, ON_CLICK_KEY, function(event) {
+      recordID(GRANDPARENT);
+      expect(event.currentTarget).toBe(GRANDPARENT);
+    });
+    CHILD.click();
+    expect(idCallOrder.length).toBe(3);
+    expect(idCallOrder[0]).toBe(CHILD);
+    expect(idCallOrder[1]).toBe(PARENT);
+    expect(idCallOrder[2]).toBe(GRANDPARENT);
+  });
+
+  it('should support stopPropagation()', () => {
+    putListener(CHILD, ON_CLICK_KEY, recordID.bind(null, CHILD));
+    putListener(
       PARENT,
       ON_CLICK_KEY,
       recordIDAndStopPropagation.bind(null, PARENT),
     );
-    await putListener(
-      GRANDPARENT,
-      ON_CLICK_KEY,
-      recordID.bind(null, GRANDPARENT),
-    );
-    await act(() => {
-      CHILD.click();
-    });
+    putListener(GRANDPARENT, ON_CLICK_KEY, recordID.bind(null, GRANDPARENT));
+    CHILD.click();
     expect(idCallOrder.length).toBe(2);
     expect(idCallOrder[0]).toBe(CHILD);
     expect(idCallOrder[1]).toBe(PARENT);
   });
 
-  it('should support overriding .isPropagationStopped()', async () => {
-    await renderTree();
+  it('should support overriding .isPropagationStopped()', () => {
     // Ew. See D4504876.
-    await putListener(CHILD, ON_CLICK_KEY, recordID.bind(null, CHILD));
-    await putListener(PARENT, ON_CLICK_KEY, function (e) {
+    putListener(CHILD, ON_CLICK_KEY, recordID.bind(null, CHILD));
+    putListener(PARENT, ON_CLICK_KEY, function(e) {
       recordID(PARENT, e);
       // This stops React bubbling but avoids touching the native event
       e.isPropagationStopped = () => true;
     });
-    await putListener(
-      GRANDPARENT,
-      ON_CLICK_KEY,
-      recordID.bind(null, GRANDPARENT),
-    );
-    await act(() => {
-      CHILD.click();
-    });
+    putListener(GRANDPARENT, ON_CLICK_KEY, recordID.bind(null, GRANDPARENT));
+    CHILD.click();
     expect(idCallOrder.length).toBe(2);
     expect(idCallOrder[0]).toBe(CHILD);
     expect(idCallOrder[1]).toBe(PARENT);
   });
 
-  it('should stop after first dispatch if stopPropagation', async () => {
-    await renderTree();
-    await putListener(
+  it('should stop after first dispatch if stopPropagation', () => {
+    putListener(
       CHILD,
       ON_CLICK_KEY,
       recordIDAndStopPropagation.bind(null, CHILD),
     );
-    await putListener(PARENT, ON_CLICK_KEY, recordID.bind(null, PARENT));
-    await putListener(
-      GRANDPARENT,
-      ON_CLICK_KEY,
-      recordID.bind(null, GRANDPARENT),
-    );
-    await act(() => {
-      CHILD.click();
-    });
+    putListener(PARENT, ON_CLICK_KEY, recordID.bind(null, PARENT));
+    putListener(GRANDPARENT, ON_CLICK_KEY, recordID.bind(null, GRANDPARENT));
+    CHILD.click();
     expect(idCallOrder.length).toBe(1);
     expect(idCallOrder[0]).toBe(CHILD);
   });
 
-  it('should not stopPropagation if false is returned', async () => {
-    await renderTree();
-    await putListener(
-      CHILD,
-      ON_CLICK_KEY,
-      recordIDAndReturnFalse.bind(null, CHILD),
-    );
-    await putListener(PARENT, ON_CLICK_KEY, recordID.bind(null, PARENT));
-    await putListener(
-      GRANDPARENT,
-      ON_CLICK_KEY,
-      recordID.bind(null, GRANDPARENT),
-    );
-    await act(() => {
-      CHILD.click();
-    });
+  it('should not stopPropagation if false is returned', () => {
+    putListener(CHILD, ON_CLICK_KEY, recordIDAndReturnFalse.bind(null, CHILD));
+    putListener(PARENT, ON_CLICK_KEY, recordID.bind(null, PARENT));
+    putListener(GRANDPARENT, ON_CLICK_KEY, recordID.bind(null, GRANDPARENT));
+    CHILD.click();
     expect(idCallOrder.length).toBe(3);
     expect(idCallOrder[0]).toBe(CHILD);
     expect(idCallOrder[1]).toBe(PARENT);
@@ -329,30 +255,31 @@ describe('ReactBrowserEventEmitter', () => {
    * these new listeners.
    */
 
-  it('should invoke handlers that were removed while bubbling', async () => {
-    await renderTree();
+  it('should invoke handlers that were removed while bubbling', () => {
     const handleParentClick = jest.fn();
-    const handleChildClick = async function (event) {
-      await deleteAllListeners(PARENT);
+    const handleChildClick = function(event) {
+      deleteAllListeners(PARENT);
     };
-    await putListener(CHILD, ON_CLICK_KEY, handleChildClick);
-    await putListener(PARENT, ON_CLICK_KEY, handleParentClick);
-    await act(() => {
-      CHILD.click();
-    });
+    putListener(CHILD, ON_CLICK_KEY, handleChildClick);
+    putListener(PARENT, ON_CLICK_KEY, handleParentClick);
+    CHILD.click();
     expect(handleParentClick).toHaveBeenCalledTimes(1);
   });
 
-  it('should not invoke newly inserted handlers while bubbling', async () => {
-    await renderTree();
+  it('should not invoke newly inserted handlers while bubbling', () => {
     const handleParentClick = jest.fn();
-    const handleChildClick = async function (event) {
-      await putListener(PARENT, ON_CLICK_KEY, handleParentClick);
+    const handleChildClick = function(event) {
+      putListener(PARENT, ON_CLICK_KEY, handleParentClick);
     };
-    await putListener(CHILD, ON_CLICK_KEY, handleChildClick);
-    await act(() => {
-      CHILD.click();
-    });
+    putListener(CHILD, ON_CLICK_KEY, handleChildClick);
+    CHILD.click();
     expect(handleParentClick).toHaveBeenCalledTimes(0);
+  });
+
+  it('should have mouse enter simulated by test utils', () => {
+    putListener(CHILD, ON_MOUSE_ENTER_KEY, recordID.bind(null, CHILD));
+    ReactTestUtils.Simulate.mouseEnter(CHILD);
+    expect(idCallOrder.length).toBe(1);
+    expect(idCallOrder[0]).toBe(CHILD);
   });
 });

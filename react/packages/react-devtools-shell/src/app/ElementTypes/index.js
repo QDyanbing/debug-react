@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -15,16 +15,18 @@ import {
   memo,
   Component,
   Fragment,
+  // $FlowFixMe Flow doesn't know about the Profiler import yet
   Profiler,
   StrictMode,
   Suspense,
+  unstable_Cache as Cache,
 } from 'react';
 
 const Context = createContext('abc');
 Context.displayName = 'ExampleContext';
 
 class ClassComponent extends Component<any> {
-  render(): null {
+  render() {
     return null;
   }
 }
@@ -52,23 +54,25 @@ const LazyComponent = lazy(() =>
   }),
 );
 
-export default function ElementTypes(): React.Node {
+export default function ElementTypes() {
   return (
     <Profiler id="test" onRender={() => {}}>
       <Fragment>
         <Context.Provider value={'def'}>
-          <Context.Consumer>{(value: $FlowFixMe) => null}</Context.Consumer>
+          <Context.Consumer>{value => null}</Context.Consumer>
         </Context.Provider>
         <StrictMode>
-          <Suspense fallback={<div>Loading...</div>}>
-            <ClassComponent />
-            <FunctionComponent />
-            <MemoFunctionComponent />
-            <ForwardRefComponent />
-            <ForwardRefComponentWithAnonymousFunction />
-            <ForwardRefComponentWithCustomDisplayName />
-            <LazyComponent />
-          </Suspense>
+          <Cache>
+            <Suspense fallback={<div>Loading...</div>}>
+              <ClassComponent />
+              <FunctionComponent />
+              <MemoFunctionComponent />
+              <ForwardRefComponent />
+              <ForwardRefComponentWithAnonymousFunction />
+              <ForwardRefComponentWithCustomDisplayName />
+              <LazyComponent />
+            </Suspense>
+          </Cache>
         </StrictMode>
       </Fragment>
     </Profiler>

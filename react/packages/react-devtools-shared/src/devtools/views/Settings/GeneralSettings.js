@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -11,7 +11,7 @@ import * as React from 'react';
 import {useContext, useMemo} from 'react';
 import {SettingsContext} from './SettingsContext';
 import {StoreContext} from '../context';
-import {CHANGE_LOG_URL} from 'react-devtools-shared/src/devtools/constants';
+import {CHANGE_LOG_URL} from 'react-devtools-shared/src/constants';
 
 import styles from './SettingsShared.css';
 
@@ -28,7 +28,7 @@ function getChangeLogUrl(version: ?string): string | null {
   return `${CHANGE_LOG_URL}#${versionAnchor}`;
 }
 
-export default function GeneralSettings(_: {}): React.Node {
+export default function GeneralSettings(_: {||}) {
   const {
     displayDensity,
     setDisplayDensity,
@@ -113,7 +113,7 @@ export default function GeneralSettings(_: {}): React.Node {
   );
 }
 
-function Version({label, version}: {label: string, version: ?string}) {
+function Version({label, version}: {|label: string, version: ?string|}) {
   const changelogLink = useMemo(() => {
     return getChangeLogUrl(version);
   }, [version]);

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -16,8 +16,7 @@ if (__DEV__) {
   ReactFreshRuntime = require('react-refresh/runtime');
   ReactFreshRuntime.injectIntoGlobalHook(global);
 }
-const ReactDOMClient = require('react-dom/client');
-const act = require('internal-test-utils').act;
+const ReactDOM = require('react-dom');
 
 jest.resetModules();
 const ReactART = require('react-art');
@@ -42,14 +41,14 @@ describe('ReactFresh', () => {
     }
   });
 
-  it('can update components managed by different renderers independently', async () => {
+  it('can update components managed by different renderers independently', () => {
     if (__DEV__) {
-      const InnerV1 = function () {
+      const InnerV1 = function() {
         return <ReactART.Shape fill="blue" />;
       };
       ReactFreshRuntime.register(InnerV1, 'Inner');
 
-      const OuterV1 = function () {
+      const OuterV1 = function() {
         return (
           <div style={{color: 'blue'}}>
             <ReactART.Surface>
@@ -60,17 +59,14 @@ describe('ReactFresh', () => {
       };
       ReactFreshRuntime.register(OuterV1, 'Outer');
 
-      const root = ReactDOMClient.createRoot(container);
-      await act(() => {
-        root.render(<OuterV1 />);
-      });
+      ReactDOM.render(<OuterV1 />, container);
       const el = container.firstChild;
       const pathEl = el.querySelector('path');
       expect(el.style.color).toBe('blue');
       expect(pathEl.getAttributeNS(null, 'fill')).toBe('rgb(0, 0, 255)');
 
       // Perform a hot update to the ART-rendered component.
-      const InnerV2 = function () {
+      const InnerV2 = function() {
         return <ReactART.Shape fill="red" />;
       };
       ReactFreshRuntime.register(InnerV2, 'Inner');
@@ -82,7 +78,7 @@ describe('ReactFresh', () => {
       expect(pathEl.getAttributeNS(null, 'fill')).toBe('rgb(255, 0, 0)');
 
       // Perform a hot update to the DOM-rendered component.
-      const OuterV2 = function () {
+      const OuterV2 = function() {
         return (
           <div style={{color: 'red'}}>
             <ReactART.Surface>

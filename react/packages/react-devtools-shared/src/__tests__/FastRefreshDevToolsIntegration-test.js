@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,22 +7,25 @@
  * @flow
  */
 
-import {getVersionedRenderImplementation} from './utils';
-
 describe('Fast Refresh', () => {
   let React;
   let ReactFreshRuntime;
   let act;
   let babel;
+  let container;
   let exportsObj;
   let freshPlugin;
+  let legacyRender;
   let store;
   let withErrorsOrWarningsIgnored;
 
-  beforeEach(() => {
-    global.IS_REACT_ACT_ENVIRONMENT = true;
+  afterEach(() => {
+    jest.resetModules();
+  });
 
+  beforeEach(() => {
     exportsObj = undefined;
+    container = document.createElement('div');
 
     babel = require('@babel/core');
     freshPlugin = require('react-refresh/babel');
@@ -36,11 +39,9 @@ describe('Fast Refresh', () => {
 
     const utils = require('./utils');
     act = utils.act;
+    legacyRender = utils.legacyRender;
     withErrorsOrWarningsIgnored = utils.withErrorsOrWarningsIgnored;
   });
-
-  const {render: renderImplementation, getContainer} =
-    getVersionedRenderImplementation();
 
   function execute(source) {
     const compiled = babel.transform(source, {
@@ -72,7 +73,7 @@ describe('Fast Refresh', () => {
   function render(source) {
     const Component = execute(source);
     act(() => {
-      renderImplementation(<Component />);
+      legacyRender(<Component />, container);
     });
     // Module initialization shouldn't be counted as a hot update.
     expect(ReactFreshRuntime.performReactRefresh()).toBe(null);
@@ -97,7 +98,7 @@ describe('Fast Refresh', () => {
       // Here, we'll just force a re-render using the newer type to emulate this.
       const NextComponent = nextExports.default;
       act(() => {
-        renderImplementation(<NextComponent />);
+        legacyRender(<NextComponent />, container);
       });
     }
     act(() => {
@@ -141,8 +142,8 @@ describe('Fast Refresh', () => {
             <Child key="A">
     `);
 
-    let element = getContainer().firstChild;
-    expect(getContainer().firstChild).not.toBe(null);
+    let element = container.firstChild;
+    expect(container.firstChild).not.toBe(null);
 
     patch(`
       function Parent() {
@@ -162,8 +163,8 @@ describe('Fast Refresh', () => {
     `);
 
     // State is preserved; this verifies that Fast Refresh is wired up.
-    expect(getContainer().firstChild).toBe(element);
-    element = getContainer().firstChild;
+    expect(container.firstChild).toBe(element);
+    element = container.firstChild;
 
     patch(`
       function Parent() {
@@ -183,7 +184,7 @@ describe('Fast Refresh', () => {
     `);
 
     // State is reset because hooks changed.
-    expect(getContainer().firstChild).not.toBe(element);
+    expect(container.firstChild).not.toBe(element);
   });
 
   // @reactVersion >= 16.9

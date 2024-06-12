@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -11,8 +11,8 @@
 
 let PropTypes;
 let React;
-let ReactDOMClient;
-let act;
+let ReactDOM;
+let ReactTestUtils;
 
 function FunctionComponent(props) {
   return <div>{props.name}</div>;
@@ -20,25 +20,21 @@ function FunctionComponent(props) {
 
 describe('ReactFunctionComponent', () => {
   beforeEach(() => {
-    jest.resetModules();
+    jest.resetModuleRegistry();
     PropTypes = require('prop-types');
     React = require('react');
-    ReactDOMClient = require('react-dom/client');
-    act = require('internal-test-utils').act;
+    ReactDOM = require('react-dom');
+    ReactTestUtils = require('react-dom/test-utils');
   });
 
-  it('should render stateless component', async () => {
+  it('should render stateless component', () => {
     const el = document.createElement('div');
-
-    const root = ReactDOMClient.createRoot(el);
-    await act(() => {
-      root.render(<FunctionComponent name="A" />);
-    });
+    ReactDOM.render(<FunctionComponent name="A" />, el);
 
     expect(el.textContent).toBe('A');
   });
 
-  it('should update stateless component', async () => {
+  it('should update stateless component', () => {
     class Parent extends React.Component {
       render() {
         return <FunctionComponent {...this.props} />;
@@ -46,34 +42,24 @@ describe('ReactFunctionComponent', () => {
     }
 
     const el = document.createElement('div');
-
-    const root = ReactDOMClient.createRoot(el);
-    await act(() => {
-      root.render(<Parent name="A" />);
-    });
+    ReactDOM.render(<Parent name="A" />, el);
     expect(el.textContent).toBe('A');
 
-    await act(() => {
-      root.render(<Parent name="B" />);
-    });
+    ReactDOM.render(<Parent name="B" />, el);
     expect(el.textContent).toBe('B');
   });
 
-  it('should unmount stateless component', async () => {
+  it('should unmount stateless component', () => {
     const container = document.createElement('div');
 
-    const root = ReactDOMClient.createRoot(container);
-    await act(() => {
-      root.render(<FunctionComponent name="A" />);
-    });
+    ReactDOM.render(<FunctionComponent name="A" />, container);
     expect(container.textContent).toBe('A');
 
-    root.unmount();
+    ReactDOM.unmountComponentAtNode(container);
     expect(container.textContent).toBe('');
   });
 
-  // @gate !disableLegacyContext
-  it('should pass context thru stateless component', async () => {
+  it('should pass context thru stateless component', () => {
     class Child extends React.Component {
       static contextTypes = {
         test: PropTypes.string.isRequired,
@@ -103,41 +89,32 @@ describe('ReactFunctionComponent', () => {
     }
 
     const el = document.createElement('div');
-
-    const root = ReactDOMClient.createRoot(el);
-    await act(() => {
-      root.render(<GrandParent test="test" />);
-    });
+    ReactDOM.render(<GrandParent test="test" />, el);
 
     expect(el.textContent).toBe('test');
 
-    await act(() => {
-      root.render(<GrandParent test="mest" />);
-    });
+    ReactDOM.render(<GrandParent test="mest" />, el);
 
     expect(el.textContent).toBe('mest');
   });
 
-  it('should warn for getDerivedStateFromProps on a function component', async () => {
+  it('should warn for getDerivedStateFromProps on a function component', () => {
     function FunctionComponentWithChildContext() {
       return null;
     }
-    FunctionComponentWithChildContext.getDerivedStateFromProps = function () {};
+    FunctionComponentWithChildContext.getDerivedStateFromProps = function() {};
 
     const container = document.createElement('div');
 
-    await expect(async () => {
-      const root = ReactDOMClient.createRoot(container);
-      await act(() => {
-        root.render(<FunctionComponentWithChildContext />);
-      });
-    }).toErrorDev(
+    expect(() =>
+      ReactDOM.render(<FunctionComponentWithChildContext />, container),
+    ).toErrorDev(
       'FunctionComponentWithChildContext: Function ' +
         'components do not support getDerivedStateFromProps.',
     );
   });
 
-  it('should warn for childContextTypes on a function component', async () => {
+  it('should warn for childContextTypes on a function component', () => {
     function FunctionComponentWithChildContext(props) {
       return <div>{props.name}</div>;
     }
@@ -148,51 +125,50 @@ describe('ReactFunctionComponent', () => {
 
     const container = document.createElement('div');
 
-    await expect(async () => {
-      const root = ReactDOMClient.createRoot(container);
-      await act(() => {
-        root.render(<FunctionComponentWithChildContext name="A" />);
-      });
-    }).toErrorDev(
-      'childContextTypes cannot ' + 'be defined on a function component.',
+    expect(() =>
+      ReactDOM.render(
+        <FunctionComponentWithChildContext name="A" />,
+        container,
+      ),
+    ).toErrorDev(
+      'FunctionComponentWithChildContext(...): childContextTypes cannot ' +
+        'be defined on a function component.',
     );
   });
 
-  it('should not throw when stateless component returns undefined', async () => {
+  it('should not throw when stateless component returns undefined', () => {
     function NotAComponent() {}
-    const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    await expect(
-      act(() => {
-        root.render(
-          <div>
-            <NotAComponent />
-          </div>,
-        );
-      }),
-    ).resolves.not.toThrowError();
+    expect(function() {
+      ReactTestUtils.renderIntoDocument(
+        <div>
+          <NotAComponent />
+        </div>,
+      );
+    }).not.toThrowError();
   });
 
-  // @gate !disableStringRefs
-  it('should throw on string refs in pure functions', async () => {
+  it('should throw on string refs in pure functions', () => {
     function Child() {
       return <div ref="me" />;
     }
 
-    const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    await expect(
-      act(() => {
-        root.render(<Child test="test" />);
-      }),
-    )
-      // TODO: This throws an AggregateError. Need to update test infra to
-      // support matching against AggregateError.
-      .rejects.toThrowError();
+    expect(function() {
+      ReactTestUtils.renderIntoDocument(<Child test="test" />);
+    }).toThrowError(
+      __DEV__
+        ? 'Function components cannot have string refs. We recommend using useRef() instead.'
+        : // It happens because we don't save _owner in production for
+          // function components.
+          'Element ref was specified as a string (me) but no owner was set. This could happen for one of' +
+            ' the following reasons:\n' +
+            '1. You may be adding a ref to a function component\n' +
+            "2. You may be adding a ref to a component that was not created inside a component's render method\n" +
+            '3. You have multiple copies of React loaded\n' +
+            'See https://reactjs.org/link/refs-must-have-owner for more information.',
+    );
   });
 
-  // @gate !enableRefAsProp || !__DEV__
-  it('should warn when given a string ref', async () => {
+  it('should warn when given a string ref', () => {
     function Indirection(props) {
       return <div>{props.children}</div>;
     }
@@ -207,14 +183,10 @@ describe('ReactFunctionComponent', () => {
       }
     }
 
-    await expect(async () => {
-      const container = document.createElement('div');
-      const root = ReactDOMClient.createRoot(container);
-      await act(() => {
-        root.render(<ParentUsingStringRef />);
-      });
-    }).toErrorDev(
-      'Function components cannot be given refs. ' +
+    expect(() =>
+      ReactTestUtils.renderIntoDocument(<ParentUsingStringRef />),
+    ).toErrorDev(
+      'Warning: Function components cannot be given refs. ' +
         'Attempts to access this ref will fail. ' +
         'Did you mean to use React.forwardRef()?\n\n' +
         'Check the render method ' +
@@ -226,38 +198,33 @@ describe('ReactFunctionComponent', () => {
     );
 
     // No additional warnings should be logged
-    const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    await act(() => {
-      root.render(<ParentUsingStringRef />);
-    });
+    ReactTestUtils.renderIntoDocument(<ParentUsingStringRef />);
   });
 
-  // @gate !enableRefAsProp || !__DEV__
-  it('should warn when given a function ref', async () => {
+  it('should warn when given a function ref', () => {
     function Indirection(props) {
       return <div>{props.children}</div>;
     }
 
-    const ref = jest.fn();
     class ParentUsingFunctionRef extends React.Component {
       render() {
         return (
           <Indirection>
-            <FunctionComponent name="A" ref={ref} />
+            <FunctionComponent
+              name="A"
+              ref={arg => {
+                expect(arg).toBe(null);
+              }}
+            />
           </Indirection>
         );
       }
     }
 
-    await expect(async () => {
-      const container = document.createElement('div');
-      const root = ReactDOMClient.createRoot(container);
-      await act(() => {
-        root.render(<ParentUsingFunctionRef />);
-      });
-    }).toErrorDev(
-      'Function components cannot be given refs. ' +
+    expect(() =>
+      ReactTestUtils.renderIntoDocument(<ParentUsingFunctionRef />),
+    ).toErrorDev(
+      'Warning: Function components cannot be given refs. ' +
         'Attempts to access this ref will fail. ' +
         'Did you mean to use React.forwardRef()?\n\n' +
         'Check the render method ' +
@@ -267,45 +234,31 @@ describe('ReactFunctionComponent', () => {
         '    in Indirection (at **)\n' +
         '    in ParentUsingFunctionRef (at **)',
     );
-    expect(ref).not.toHaveBeenCalled();
 
     // No additional warnings should be logged
-    const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    await act(() => {
-      root.render(<ParentUsingFunctionRef />);
-    });
+    ReactTestUtils.renderIntoDocument(<ParentUsingFunctionRef />);
   });
 
-  // @gate !enableRefAsProp || !__DEV__
-  it('deduplicates ref warnings based on element or owner', async () => {
+  it('deduplicates ref warnings based on element or owner', () => {
     // When owner uses JSX, we can use exact line location to dedupe warnings
     class AnonymousParentUsingJSX extends React.Component {
       render() {
         return <FunctionComponent name="A" ref={() => {}} />;
       }
     }
+    Object.defineProperty(AnonymousParentUsingJSX, 'name', {value: undefined});
 
     let instance1;
 
-    await expect(async () => {
-      const container = document.createElement('div');
-      const root = ReactDOMClient.createRoot(container);
-
-      await act(() => {
-        root.render(
-          <AnonymousParentUsingJSX ref={current => (instance1 = current)} />,
-        );
-      });
-    }).toErrorDev('Function components cannot be given refs.');
+    expect(() => {
+      instance1 = ReactTestUtils.renderIntoDocument(
+        <AnonymousParentUsingJSX />,
+      );
+    }).toErrorDev('Warning: Function components cannot be given refs.');
     // Should be deduped (offending element is on the same line):
     instance1.forceUpdate();
     // Should also be deduped (offending element is on the same line):
-    let container = document.createElement('div');
-    let root = ReactDOMClient.createRoot(container);
-    await act(() => {
-      root.render(<AnonymousParentUsingJSX />);
-    });
+    ReactTestUtils.renderIntoDocument(<AnonymousParentUsingJSX />);
 
     // When owner doesn't use JSX, and is anonymous, we warn once per internal instance.
     class AnonymousParentNotUsingJSX extends React.Component {
@@ -316,25 +269,20 @@ describe('ReactFunctionComponent', () => {
         });
       }
     }
+    Object.defineProperty(AnonymousParentNotUsingJSX, 'name', {
+      value: undefined,
+    });
 
     let instance2;
-    await expect(async () => {
-      container = document.createElement('div');
-      root = ReactDOMClient.createRoot(container);
-      await act(() => {
-        root.render(
-          <AnonymousParentNotUsingJSX ref={current => (instance2 = current)} />,
-        );
-      });
-    }).toErrorDev('Function components cannot be given refs.');
+    expect(() => {
+      instance2 = ReactTestUtils.renderIntoDocument(
+        <AnonymousParentNotUsingJSX />,
+      );
+    }).toErrorDev('Warning: Function components cannot be given refs.');
     // Should be deduped (same internal instance, no additional warnings)
     instance2.forceUpdate();
     // Could not be differentiated (since owner is anonymous and no source location)
-    container = document.createElement('div');
-    root = ReactDOMClient.createRoot(container);
-    await act(() => {
-      root.render(<AnonymousParentNotUsingJSX />);
-    });
+    ReactTestUtils.renderIntoDocument(<AnonymousParentNotUsingJSX />);
 
     // When owner doesn't use JSX, but is named, we warn once per owner name
     class NamedParentNotUsingJSX extends React.Component {
@@ -346,30 +294,18 @@ describe('ReactFunctionComponent', () => {
       }
     }
     let instance3;
-    await expect(async () => {
-      container = document.createElement('div');
-      root = ReactDOMClient.createRoot(container);
-      await act(() => {
-        root.render(
-          <NamedParentNotUsingJSX ref={current => (instance3 = current)} />,
-        );
-      });
-    }).toErrorDev('Function components cannot be given refs.');
+    expect(() => {
+      instance3 = ReactTestUtils.renderIntoDocument(<NamedParentNotUsingJSX />);
+    }).toErrorDev('Warning: Function components cannot be given refs.');
     // Should be deduped (same owner name, no additional warnings):
     instance3.forceUpdate();
     // Should also be deduped (same owner name, no additional warnings):
-    container = document.createElement('div');
-    root = ReactDOMClient.createRoot(container);
-    await act(() => {
-      root.render(<NamedParentNotUsingJSX />);
-    });
+    ReactTestUtils.renderIntoDocument(<NamedParentNotUsingJSX />);
   });
 
   // This guards against a regression caused by clearing the current debug fiber.
   // https://github.com/facebook/react/issues/10831
-  // @gate !disableLegacyContext || !__DEV__
-  // @gate !enableRefAsProp || !__DEV__
-  it('should warn when giving a function ref with context', async () => {
+  it('should warn when giving a function ref with context', () => {
     function Child() {
       return null;
     }
@@ -387,18 +323,12 @@ describe('ReactFunctionComponent', () => {
         };
       }
       render() {
-        return <Child ref={function () {}} />;
+        return <Child ref={function() {}} />;
       }
     }
 
-    await expect(async () => {
-      const container = document.createElement('div');
-      const root = ReactDOMClient.createRoot(container);
-      await act(() => {
-        root.render(<Parent />);
-      });
-    }).toErrorDev(
-      'Function components cannot be given refs. ' +
+    expect(() => ReactTestUtils.renderIntoDocument(<Parent />)).toErrorDev(
+      'Warning: Function components cannot be given refs. ' +
         'Attempts to access this ref will fail. ' +
         'Did you mean to use React.forwardRef()?\n\n' +
         'Check the render method ' +
@@ -408,45 +338,43 @@ describe('ReactFunctionComponent', () => {
     );
   });
 
-  it('should use correct name in key warning', async () => {
+  it('should provide a null ref', () => {
+    function Child() {
+      return <div />;
+    }
+
+    const comp = ReactTestUtils.renderIntoDocument(<Child />);
+    expect(comp).toBe(null);
+  });
+
+  it('should use correct name in key warning', () => {
     function Child() {
       return <div>{[<span />]}</div>;
     }
 
-    await expect(async () => {
-      const container = document.createElement('div');
-      const root = ReactDOMClient.createRoot(container);
-      await act(() => {
-        root.render(<Child />);
-      });
-    }).toErrorDev(
+    expect(() => ReactTestUtils.renderIntoDocument(<Child />)).toErrorDev(
       'Each child in a list should have a unique "key" prop.\n\n' +
         'Check the render method of `Child`.',
     );
   });
 
-  // @gate !disableDefaultPropsExceptForClasses
-  it('should support default props', async () => {
+  // TODO: change this test after we deprecate default props support
+  // for function components
+  it('should support default props and prop types', () => {
     function Child(props) {
       return <div>{props.test}</div>;
     }
     Child.defaultProps = {test: 2};
+    Child.propTypes = {test: PropTypes.string};
 
-    await expect(async () => {
-      const container = document.createElement('div');
-      const root = ReactDOMClient.createRoot(container);
-
-      await act(() => {
-        root.render(<Child />);
-      });
-      expect(container.textContent).toBe('2');
-    }).toErrorDev([
-      'Child: Support for defaultProps will be removed from function components in a future major release. Use JavaScript default parameters instead.',
-    ]);
+    expect(() => ReactTestUtils.renderIntoDocument(<Child />)).toErrorDev(
+      'Warning: Failed prop type: Invalid prop `test` of type `number` ' +
+        'supplied to `Child`, expected `string`.\n' +
+        '    in Child (at **)',
+    );
   });
 
-  // @gate !disableLegacyContext
-  it('should receive context', async () => {
+  it('should receive context', () => {
     class Parent extends React.Component {
       static childContextTypes = {
         lang: PropTypes.string,
@@ -467,54 +395,32 @@ describe('ReactFunctionComponent', () => {
     Child.contextTypes = {lang: PropTypes.string};
 
     const el = document.createElement('div');
-
-    const root = ReactDOMClient.createRoot(el);
-    await act(() => {
-      root.render(<Parent />);
-    });
+    ReactDOM.render(<Parent />, el);
     expect(el.textContent).toBe('en');
   });
 
-  it('should work with arrow functions', async () => {
-    let Child = function () {
+  it('should work with arrow functions', () => {
+    let Child = function() {
       return <div />;
     };
     // Will create a new bound function without a prototype, much like a native
     // arrow function.
     Child = Child.bind(this);
 
-    await expect(async () => {
-      const container = document.createElement('div');
-      const root = ReactDOMClient.createRoot(container);
-      await act(() => {
-        root.render(<Child />);
-      });
-    }).not.toThrow();
+    expect(() => ReactTestUtils.renderIntoDocument(<Child />)).not.toThrow();
   });
 
-  it('should allow simple functions to return null', async () => {
-    const Child = function () {
+  it('should allow simple functions to return null', () => {
+    const Child = function() {
       return null;
     };
-    await expect(async () => {
-      const container = document.createElement('div');
-      const root = ReactDOMClient.createRoot(container);
-      await act(() => {
-        root.render(<Child />);
-      });
-    }).not.toThrow();
+    expect(() => ReactTestUtils.renderIntoDocument(<Child />)).not.toThrow();
   });
 
-  it('should allow simple functions to return false', async () => {
+  it('should allow simple functions to return false', () => {
     function Child() {
       return false;
     }
-    const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    await expect(
-      act(() => {
-        root.render(<Child />);
-      }),
-    ).resolves.not.toThrow();
+    expect(() => ReactTestUtils.renderIntoDocument(<Child />)).not.toThrow();
   });
 });

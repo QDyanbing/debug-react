@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -9,42 +9,30 @@
 
 'use strict';
 
-import {patchMessageChannel} from '../../../../scripts/jest/patchMessageChannel';
-
 // Polyfills for test environment
-global.ReadableStream =
-  require('web-streams-polyfill/ponyfill/es6').ReadableStream;
+global.ReadableStream = require('web-streams-polyfill/ponyfill/es6').ReadableStream;
 global.TextEncoder = require('util').TextEncoder;
 
 let React;
+let ReactDOMClient;
 let ReactDOMFizzServer;
 let Suspense;
 let Scheduler;
-let act;
+let JSDOM;
+let document;
+let container;
 
-describe('ReactDOMFizzServerBrowser', () => {
+describe('ReactDOMFizzServer', () => {
   beforeEach(() => {
     jest.resetModules();
-
-    Scheduler = require('scheduler');
-    patchMessageChannel(Scheduler);
-    act = require('internal-test-utils').act;
-
     React = require('react');
-    ReactDOMFizzServer = require('react-dom/server.browser');
+    ReactDOMClient = require('react-dom/client');
+    Scheduler = require('scheduler');
+    if (__EXPERIMENTAL__) {
+      ReactDOMFizzServer = require('react-dom/server.browser');
+    }
     Suspense = React.Suspense;
   });
-
-  async function serverAct(callback) {
-    let maybePromise;
-    await act(() => {
-      maybePromise = callback();
-      if (maybePromise && typeof maybePromise.catch === 'function') {
-        maybePromise.catch(() => {});
-      }
-    });
-    return maybePromise;
-  }
 
   const theError = new Error('This is an error');
   function Throw() {
@@ -67,84 +55,89 @@ describe('ReactDOMFizzServerBrowser', () => {
     }
   }
 
-  it('should call renderToReadableStream', async () => {
-    const stream = await serverAct(() =>
-      ReactDOMFizzServer.renderToReadableStream(<div>hello world</div>),
-    );
-    const result = await readResult(stream);
-    expect(result).toMatchInlineSnapshot(`"<div>hello world</div>"`);
-  });
+  describe('renderToReadableStream', () => {
+    // @gate experimental
+    it('should call renderToReadableStream', async () => {
+      const stream = await ReactDOMFizzServer.renderToReadableStream(
+        <div>hello world</div>,
+      );
+      const result = await readResult(stream);
+      expect(result).toMatchInlineSnapshot(`"<div>hello world</div>"`);
+    });
 
-  it('should emit DOCTYPE at the root of the document', async () => {
-    const stream = await serverAct(() =>
-      ReactDOMFizzServer.renderToReadableStream(
+    // @gate experimental
+    it('should emit DOCTYPE at the root of the document', async () => {
+      const stream = await ReactDOMFizzServer.renderToReadableStream(
         <html>
           <body>hello world</body>
         </html>,
-      ),
-    );
-    const result = await readResult(stream);
-    expect(result).toMatchInlineSnapshot(
-      `"<!DOCTYPE html><html><head></head><body>hello world</body></html>"`,
-    );
-  });
+      );
+      const result = await readResult(stream);
+      expect(result).toMatchInlineSnapshot(
+        `"<!DOCTYPE html><html><body>hello world</body></html>"`,
+      );
+    });
 
-  it('should emit bootstrap script src at the end', async () => {
-    const stream = await serverAct(() =>
-      ReactDOMFizzServer.renderToReadableStream(<div>hello world</div>, {
-        bootstrapScriptContent: 'INIT();',
-        bootstrapScripts: ['init.js'],
-        bootstrapModules: ['init.mjs'],
-      }),
-    );
-    const result = await readResult(stream);
-    expect(result).toMatchInlineSnapshot(
-      `"<link rel="preload" as="script" fetchPriority="low" href="init.js"/><link rel="modulepreload" fetchPriority="low" href="init.mjs"/><div>hello world</div><script>INIT();</script><script src="init.js" async=""></script><script type="module" src="init.mjs" async=""></script>"`,
-    );
-  });
+    // @gate experimental
+    it('should emit bootstrap script src at the end', async () => {
+      const stream = await ReactDOMFizzServer.renderToReadableStream(
+        <div>hello world</div>,
+        {
+          bootstrapScriptContent: 'INIT();',
+          bootstrapScripts: ['init.js'],
+          bootstrapModules: ['init.mjs'],
+        },
+      );
+      const result = await readResult(stream);
+      expect(result).toMatchInlineSnapshot(
+        `"<div>hello world</div><script>INIT();</script><script src=\\"init.js\\" async=\\"\\"></script><script type=\\"module\\" src=\\"init.mjs\\" async=\\"\\"></script>"`,
+      );
+    });
 
-  it('emits all HTML as one unit if we wait until the end to start', async () => {
-    let hasLoaded = false;
-    let resolve;
-    const promise = new Promise(r => (resolve = r));
-    function Wait() {
-      if (!hasLoaded) {
-        throw promise;
+    // @gate experimental
+    it('emits all HTML as one unit if we wait until the end to start', async () => {
+      let hasLoaded = false;
+      let resolve;
+      const promise = new Promise(r => (resolve = r));
+      function Wait() {
+        if (!hasLoaded) {
+          throw promise;
+        }
+        return 'Done';
       }
-      return 'Done';
-    }
-    let isComplete = false;
-    const stream = await serverAct(() =>
-      ReactDOMFizzServer.renderToReadableStream(
+      let isComplete = false;
+      const stream = await ReactDOMFizzServer.renderToReadableStream(
         <div>
           <Suspense fallback="Loading">
             <Wait />
           </Suspense>
         </div>,
-      ),
-    );
+      );
 
-    stream.allReady.then(() => (isComplete = true));
+      stream.allReady.then(() => (isComplete = true));
 
-    expect(isComplete).toBe(false);
-    // Resolve the loading.
-    hasLoaded = true;
-    await serverAct(() => resolve());
+      await jest.runAllTimers();
+      expect(isComplete).toBe(false);
+      // Resolve the loading.
+      hasLoaded = true;
+      await resolve();
 
-    expect(isComplete).toBe(true);
+      await jest.runAllTimers();
 
-    const result = await readResult(stream);
-    expect(result).toMatchInlineSnapshot(
-      `"<div><!--$-->Done<!-- --><!--/$--></div>"`,
-    );
-  });
+      expect(isComplete).toBe(true);
 
-  it('should reject the promise when an error is thrown at the root', async () => {
-    const reportedErrors = [];
-    let caughtError = null;
-    try {
-      await serverAct(() =>
-        ReactDOMFizzServer.renderToReadableStream(
+      const result = await readResult(stream);
+      expect(result).toMatchInlineSnapshot(
+        `"<div><!--$-->Done<!-- --><!--/$--></div>"`,
+      );
+    });
+
+    // @gate experimental
+    it('should reject the promise when an error is thrown at the root', async () => {
+      const reportedErrors = [];
+      let caughtError = null;
+      try {
+        await ReactDOMFizzServer.renderToReadableStream(
           <div>
             <Throw />
           </div>,
@@ -153,21 +146,20 @@ describe('ReactDOMFizzServerBrowser', () => {
               reportedErrors.push(x);
             },
           },
-        ),
-      );
-    } catch (error) {
-      caughtError = error;
-    }
-    expect(caughtError).toBe(theError);
-    expect(reportedErrors).toEqual([theError]);
-  });
+        );
+      } catch (error) {
+        caughtError = error;
+      }
+      expect(caughtError).toBe(theError);
+      expect(reportedErrors).toEqual([theError]);
+    });
 
-  it('should reject the promise when an error is thrown inside a fallback', async () => {
-    const reportedErrors = [];
-    let caughtError = null;
-    try {
-      await serverAct(() =>
-        ReactDOMFizzServer.renderToReadableStream(
+    // @gate experimental
+    it('should reject the promise when an error is thrown inside a fallback', async () => {
+      const reportedErrors = [];
+      let caughtError = null;
+      try {
+        await ReactDOMFizzServer.renderToReadableStream(
           <div>
             <Suspense fallback={<Throw />}>
               <InfiniteSuspend />
@@ -178,19 +170,18 @@ describe('ReactDOMFizzServerBrowser', () => {
               reportedErrors.push(x);
             },
           },
-        ),
-      );
-    } catch (error) {
-      caughtError = error;
-    }
-    expect(caughtError).toBe(theError);
-    expect(reportedErrors).toEqual([theError]);
-  });
+        );
+      } catch (error) {
+        caughtError = error;
+      }
+      expect(caughtError).toBe(theError);
+      expect(reportedErrors).toEqual([theError]);
+    });
 
-  it('should not error the stream when an error is thrown inside suspense boundary', async () => {
-    const reportedErrors = [];
-    const stream = await serverAct(() =>
-      ReactDOMFizzServer.renderToReadableStream(
+    // @gate experimental
+    it('should not error the stream when an error is thrown inside suspense boundary', async () => {
+      const reportedErrors = [];
+      const stream = await ReactDOMFizzServer.renderToReadableStream(
         <div>
           <Suspense fallback={<div>Loading</div>}>
             <Throw />
@@ -201,114 +192,18 @@ describe('ReactDOMFizzServerBrowser', () => {
             reportedErrors.push(x);
           },
         },
-      ),
-    );
-
-    const result = await readResult(stream);
-    expect(result).toContain('Loading');
-    expect(reportedErrors).toEqual([theError]);
-  });
-
-  it('should be able to complete by aborting even if the promise never resolves', async () => {
-    const errors = [];
-    const controller = new AbortController();
-    const stream = await serverAct(() =>
-      ReactDOMFizzServer.renderToReadableStream(
-        <div>
-          <Suspense fallback={<div>Loading</div>}>
-            <InfiniteSuspend />
-          </Suspense>
-        </div>,
-        {
-          signal: controller.signal,
-          onError(x) {
-            errors.push(x.message);
-          },
-        },
-      ),
-    );
-
-    controller.abort();
-
-    const result = await readResult(stream);
-    expect(result).toContain('Loading');
-
-    expect(errors).toEqual(['The operation was aborted.']);
-  });
-
-  it('should reject if aborting before the shell is complete', async () => {
-    const errors = [];
-    const controller = new AbortController();
-    const promise = serverAct(() =>
-      ReactDOMFizzServer.renderToReadableStream(
-        <div>
-          <InfiniteSuspend />
-        </div>,
-        {
-          signal: controller.signal,
-          onError(x) {
-            errors.push(x.message);
-          },
-        },
-      ),
-    );
-
-    const theReason = new Error('aborted for reasons');
-    controller.abort(theReason);
-
-    let caughtError = null;
-    try {
-      await promise;
-    } catch (error) {
-      caughtError = error;
-    }
-    expect(caughtError).toBe(theReason);
-    expect(errors).toEqual(['aborted for reasons']);
-  });
-
-  it('should be able to abort before something suspends', async () => {
-    const errors = [];
-    const controller = new AbortController();
-    function App() {
-      controller.abort();
-      return (
-        <Suspense fallback={<div>Loading</div>}>
-          <InfiniteSuspend />
-        </Suspense>
       );
-    }
-    const streamPromise = serverAct(() =>
-      ReactDOMFizzServer.renderToReadableStream(
-        <div>
-          <App />
-        </div>,
-        {
-          signal: controller.signal,
-          onError(x) {
-            errors.push(x.message);
-          },
-        },
-      ),
-    );
 
-    let caughtError = null;
-    try {
-      await streamPromise;
-    } catch (error) {
-      caughtError = error;
-    }
-    expect(caughtError.message).toBe('The operation was aborted.');
-    expect(errors).toEqual(['The operation was aborted.']);
-  });
+      const result = await readResult(stream);
+      expect(result).toContain('Loading');
+      expect(reportedErrors).toEqual([theError]);
+    });
 
-  it('should reject if passing an already aborted signal', async () => {
-    const errors = [];
-    const controller = new AbortController();
-    const theReason = new Error('aborted for reasons');
-    controller.abort(theReason);
-
-    const promise = serverAct(() =>
-      ReactDOMFizzServer.renderToReadableStream(
+    // @gate experimental
+    it('should be able to complete by aborting even if the promise never resolves', async () => {
+      const errors = [];
+      const controller = new AbortController();
+      const stream = await ReactDOMFizzServer.renderToReadableStream(
         <div>
           <Suspense fallback={<div>Loading</div>}>
             <InfiniteSuspend />
@@ -320,40 +215,37 @@ describe('ReactDOMFizzServerBrowser', () => {
             errors.push(x.message);
           },
         },
-      ),
-    );
+      );
 
-    // Technically we could still continue rendering the shell but currently the
-    // semantics mean that we also abort any pending CPU work.
-    let caughtError = null;
-    try {
-      await promise;
-    } catch (error) {
-      caughtError = error;
-    }
-    expect(caughtError).toBe(theReason);
-    expect(errors).toEqual(['aborted for reasons']);
-  });
+      controller.abort();
 
-  it('should not continue rendering after the reader cancels', async () => {
-    let hasLoaded = false;
-    let resolve;
-    let isComplete = false;
-    let rendered = false;
-    const promise = new Promise(r => (resolve = r));
-    function Wait() {
-      if (!hasLoaded) {
-        throw promise;
+      const result = await readResult(stream);
+      expect(result).toContain('Loading');
+
+      expect(errors).toEqual([
+        'The render was aborted by the server without a reason.',
+      ]);
+    });
+
+    // @gate experimental
+    it('should not continue rendering after the reader cancels', async () => {
+      let hasLoaded = false;
+      let resolve;
+      let isComplete = false;
+      let rendered = false;
+      const promise = new Promise(r => (resolve = r));
+      function Wait() {
+        if (!hasLoaded) {
+          throw promise;
+        }
+        rendered = true;
+        return 'Done';
       }
-      rendered = true;
-      return 'Done';
-    }
-    const errors = [];
-    const stream = await serverAct(() =>
-      ReactDOMFizzServer.renderToReadableStream(
+      const errors = [];
+      const stream = await ReactDOMFizzServer.renderToReadableStream(
         <div>
           <Suspense fallback={<div>Loading</div>}>
-            <Wait />
+            <Wait /> />
           </Suspense>
         </div>,
         {
@@ -361,45 +253,41 @@ describe('ReactDOMFizzServerBrowser', () => {
             errors.push(x.message);
           },
         },
-      ),
-    );
+      );
 
-    stream.allReady.then(() => (isComplete = true));
+      stream.allReady.then(() => (isComplete = true));
 
-    expect(rendered).toBe(false);
-    expect(isComplete).toBe(false);
+      expect(rendered).toBe(false);
+      expect(isComplete).toBe(false);
 
-    const reader = stream.getReader();
-    await reader.read();
-    await reader.cancel();
+      const reader = stream.getReader();
+      reader.cancel();
 
-    expect(errors).toEqual([
-      'The render was aborted by the server without a reason.',
-    ]);
+      expect(errors).toEqual([
+        'The render was aborted by the server without a reason.',
+      ]);
 
-    hasLoaded = true;
-    await serverAct(() => resolve());
+      hasLoaded = true;
+      resolve();
 
-    expect(rendered).toBe(false);
-    expect(isComplete).toBe(true);
+      await jest.runAllTimers();
 
-    expect(errors).toEqual([
-      'The render was aborted by the server without a reason.',
-    ]);
-  });
+      expect(rendered).toBe(false);
+      expect(isComplete).toBe(true);
+    });
 
-  it('should stream large contents that might overlow individual buffers', async () => {
-    const str492 = `(492) This string is intentionally 492 bytes long because we want to make sure we process chunks that will overflow buffer boundaries. It will repeat to fill out the bytes required (inclusive of this prompt):: foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux q :: total count (492)`;
-    const str2049 = `(2049) This string is intentionally 2049 bytes long because we want to make sure we process chunks that will overflow buffer boundaries. It will repeat to fill out the bytes required (inclusive of this prompt):: foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy  :: total count (2049)`;
+    // @gate experimental
+    it('should stream large contents that might overlow individual buffers', async () => {
+      const str492 = `(492) This string is intentionally 492 bytes long because we want to make sure we process chunks that will overflow buffer boundaries. It will repeat to fill out the bytes required (inclusive of this prompt):: foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux q :: total count (492)`;
+      const str2049 = `(2049) This string is intentionally 2049 bytes long because we want to make sure we process chunks that will overflow buffer boundaries. It will repeat to fill out the bytes required (inclusive of this prompt):: foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy thud foo bar qux quux corge grault garply waldo fred plugh xyzzy  :: total count (2049)`;
 
-    // this specific layout is somewhat contrived to exercise the landing on
-    // an exact view boundary. it's not critical to test this edge case but
-    // since we are setting up a test in general for larger chunks I contrived it
-    // as such for now. I don't think it needs to be maintained if in the future
-    // the view sizes change or become dynamic becasue of the use of byobRequest
-    let stream;
-    stream = await serverAct(() =>
-      ReactDOMFizzServer.renderToReadableStream(
+      // this specific layout is somewhat contrived to exercise the landing on
+      // an exact view boundary. it's not critical to test this edge case but
+      // since we are setting up a test in general for larger chunks I contrived it
+      // as such for now. I don't think it needs to be maintained if in the future
+      // the view sizes change or become dynamic becasue of the use of byobRequest
+      let stream;
+      stream = await ReactDOMFizzServer.renderToReadableStream(
         <>
           <div>
             <span>{''}</span>
@@ -407,188 +295,161 @@ describe('ReactDOMFizzServerBrowser', () => {
           <div>{str492}</div>
           <div>{str492}</div>
         </>,
-      ),
-    );
+      );
 
-    let result;
-    result = await readResult(stream);
+      let result;
+      result = await readResult(stream);
+      expect(result).toMatchInlineSnapshot(
+        `"<div><span></span></div><div>${str492}</div><div>${str492}</div>"`,
+      );
 
-    expect(result).toMatchInlineSnapshot(
-      // TODO: remove interpolation because it prevents snapshot updates.
-      // eslint-disable-next-line jest/no-interpolation-in-snapshots
-      `"<div><span></span></div><div>${str492}</div><div>${str492}</div>"`,
-    );
-
-    // this size 2049 was chosen to be a couple base 2 orders larger than the current view
-    // size. if the size changes in the future hopefully this will still exercise
-    // a chunk that is too large for the view size.
-    stream = await serverAct(() =>
-      ReactDOMFizzServer.renderToReadableStream(
+      // this size 2049 was chosen to be a couple base 2 orders larger than the current view
+      // size. if the size changes in the future hopefully this will still exercise
+      // a chunk that is too large for the view size.
+      stream = await ReactDOMFizzServer.renderToReadableStream(
         <>
           <div>{str2049}</div>
         </>,
-      ),
-    );
-
-    result = await readResult(stream);
-    // TODO: remove interpolation because it prevents snapshot updates.
-    // eslint-disable-next-line jest/no-interpolation-in-snapshots
-    expect(result).toMatchInlineSnapshot(`"<div>${str2049}</div>"`);
-  });
-
-  it('supports custom abort reasons with a string', async () => {
-    const promise = new Promise(r => {});
-    function Wait() {
-      throw promise;
-    }
-    function App() {
-      return (
-        <div>
-          <p>
-            <Suspense fallback={'p'}>
-              <Wait />
-            </Suspense>
-          </p>
-          <span>
-            <Suspense fallback={'span'}>
-              <Wait />
-            </Suspense>
-          </span>
-        </div>
       );
-    }
 
-    const errors = [];
-    const controller = new AbortController();
-    await serverAct(() =>
-      ReactDOMFizzServer.renderToReadableStream(<App />, {
+      result = await readResult(stream);
+      expect(result).toMatchInlineSnapshot(`"<div>${str2049}</div>"`);
+    });
+
+    // @gate experimental
+    it('Supports custom abort reasons with a string', async () => {
+      const promise = new Promise(r => {});
+      function Wait() {
+        throw promise;
+      }
+      function App() {
+        return (
+          <div>
+            <p>
+              <Suspense fallback={'p'}>
+                <Wait />
+              </Suspense>
+            </p>
+            <span>
+              <Suspense fallback={'span'}>
+                <Wait />
+              </Suspense>
+            </span>
+          </div>
+        );
+      }
+
+      const errors = [];
+      const controller = new AbortController();
+      await ReactDOMFizzServer.renderToReadableStream(<App />, {
         signal: controller.signal,
         onError(x) {
           errors.push(x);
           return 'a digest';
         },
-      }),
-    );
+      });
 
-    controller.abort('foobar');
+      // @TODO this is a hack to work around lack of support for abortSignal.reason in node
+      // The abort call itself should set this property but since we are testing in node we
+      // set it here manually
+      controller.signal.reason = 'foobar';
+      controller.abort('foobar');
 
-    expect(errors).toEqual(['foobar', 'foobar']);
-  });
+      expect(errors).toEqual(['foobar', 'foobar']);
+    });
 
-  it('supports custom abort reasons with an Error', async () => {
-    const promise = new Promise(r => {});
-    function Wait() {
-      throw promise;
-    }
-    function App() {
-      return (
-        <div>
-          <p>
-            <Suspense fallback={'p'}>
-              <Wait />
-            </Suspense>
-          </p>
-          <span>
-            <Suspense fallback={'span'}>
-              <Wait />
-            </Suspense>
-          </span>
-        </div>
-      );
-    }
+    // @gate experimental
+    it('Supports custom abort reasons with an Error', async () => {
+      const promise = new Promise(r => {});
+      function Wait() {
+        throw promise;
+      }
+      function App() {
+        return (
+          <div>
+            <p>
+              <Suspense fallback={'p'}>
+                <Wait />
+              </Suspense>
+            </p>
+            <span>
+              <Suspense fallback={'span'}>
+                <Wait />
+              </Suspense>
+            </span>
+          </div>
+        );
+      }
 
-    const errors = [];
-    const controller = new AbortController();
-    await serverAct(() =>
-      ReactDOMFizzServer.renderToReadableStream(<App />, {
+      const errors = [];
+      const controller = new AbortController();
+      await ReactDOMFizzServer.renderToReadableStream(<App />, {
         signal: controller.signal,
         onError(x) {
           errors.push(x.message);
           return 'a digest';
         },
-      }),
-    );
+      });
 
-    controller.abort(new Error('uh oh'));
+      // @TODO this is a hack to work around lack of support for abortSignal.reason in node
+      // The abort call itself should set this property but since we are testing in node we
+      // set it here manually
+      controller.signal.reason = new Error('uh oh');
+      controller.abort(new Error('uh oh'));
 
-    expect(errors).toEqual(['uh oh', 'uh oh']);
+      expect(errors).toEqual(['uh oh', 'uh oh']);
+    });
   });
 
-  // https://github.com/facebook/react/pull/25534/files - fix transposed escape functions
-  it('should encode title properly', async () => {
-    const stream = await serverAct(() =>
-      ReactDOMFizzServer.renderToReadableStream(
-        <html>
-          <head>
-            <title>foo</title>
-          </head>
-          <body>bar</body>
-        </html>,
-      ),
-    );
+  describe('renderToString', () => {
+    beforeEach(() => {
+      JSDOM = require('jsdom').JSDOM;
 
-    const result = await readResult(stream);
-    expect(result).toEqual(
-      '<!DOCTYPE html><html><head><title>foo</title></head><body>bar</body></html>',
-    );
-  });
-
-  it('should support nonce attribute for bootstrap scripts', async () => {
-    const nonce = 'R4nd0m';
-    const stream = await serverAct(() =>
-      ReactDOMFizzServer.renderToReadableStream(<div>hello world</div>, {
-        nonce,
-        bootstrapScriptContent: 'INIT();',
-        bootstrapScripts: ['init.js'],
-        bootstrapModules: ['init.mjs'],
-      }),
-    );
-    const result = await readResult(stream);
-    expect(result).toMatchInlineSnapshot(
-      // TODO: remove interpolation because it prevents snapshot updates.
-      // eslint-disable-next-line jest/no-interpolation-in-snapshots
-      `"<link rel="preload" as="script" fetchPriority="low" nonce="R4nd0m" href="init.js"/><link rel="modulepreload" fetchPriority="low" nonce="R4nd0m" href="init.mjs"/><div>hello world</div><script nonce="${nonce}">INIT();</script><script src="init.js" nonce="${nonce}" async=""></script><script type="module" src="init.mjs" nonce="${nonce}" async=""></script>"`,
-    );
-  });
-
-  // @gate enablePostpone
-  it('errors if trying to postpone outside a Suspense boundary', async () => {
-    function Postponed() {
-      React.unstable_postpone('testing postpone');
-      return 'client only';
-    }
-
-    function App() {
-      return (
-        <div>
-          <Postponed />
-        </div>
+      // Test Environment
+      const jsdom = new JSDOM(
+        '<!DOCTYPE html><html><head></head><body><div id="container">',
+        {
+          runScripts: 'dangerously',
+        },
       );
-    }
+      document = jsdom.window.document;
+      container = document.getElementById('container');
+    });
 
-    const errors = [];
-    const postponed = [];
-
-    let caughtError = null;
-    try {
-      await serverAct(() =>
-        ReactDOMFizzServer.renderToReadableStream(<App />, {
-          onError(error) {
-            errors.push(error.message);
-          },
-          onPostpone(reason) {
-            postponed.push(reason);
-          },
-        }),
+    // @gate experimental
+    it('refers users to apis that support Suspense when somethign suspends', () => {
+      function App({isClient}) {
+        return (
+          <div>
+            <Suspense fallback={'fallback'}>
+              {isClient ? 'resolved' : <InfiniteSuspend />}
+            </Suspense>
+          </div>
+        );
+      }
+      container.innerHTML = ReactDOMFizzServer.renderToString(
+        <App isClient={false} />,
       );
-    } catch (error) {
-      caughtError = error;
-    }
 
-    // Postponing is not logged as an error but as a postponed reason.
-    expect(errors).toEqual([]);
-    expect(postponed).toEqual(['testing postpone']);
-    // However, it does error the shell.
-    expect(caughtError.message).toEqual('testing postpone');
+      const errors = [];
+      ReactDOMClient.hydrateRoot(container, <App isClient={true} />, {
+        onRecoverableError(error, errorInfo) {
+          errors.push(error.message);
+        },
+      });
+
+      expect(Scheduler).toFlushAndYield([]);
+      expect(errors.length).toBe(1);
+      if (__DEV__) {
+        expect(errors[0]).toBe(
+          'The server did not finish this Suspense boundary: The server used "renderToString" which does not support Suspense. If you intended for this Suspense boundary to render the fallback content on the server consider throwing an Error somewhere within the Suspense boundary. If you intended to have the server wait for the suspended component please switch to "renderToReadableStream" which supports Suspense on the server',
+        );
+      } else {
+        expect(errors[0]).toBe(
+          'The server could not finish this Suspense boundary, likely due to ' +
+            'an error during server rendering. Switched to client rendering.',
+        );
+      }
+    });
   });
 });

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -11,11 +11,7 @@
 
 let React;
 let ReactDOM;
-let ReactDOMClient;
 let ReactDOMServer;
-let act;
-let Scheduler;
-let assertLog;
 
 function getTestDocument(markup) {
   const doc = document.implementation.createHTMLDocument('');
@@ -28,30 +24,17 @@ function getTestDocument(markup) {
   return doc;
 }
 
-function normalizeError(msg) {
-  // Take the first sentence to make it easier to assert on.
-  const idx = msg.indexOf('.');
-  if (idx > -1) {
-    return msg.slice(0, idx + 1);
-  }
-  return msg;
-}
-
 describe('rendering React components at document', () => {
   beforeEach(() => {
     jest.resetModules();
 
     React = require('react');
     ReactDOM = require('react-dom');
-    ReactDOMClient = require('react-dom/client');
     ReactDOMServer = require('react-dom/server');
-    act = require('internal-test-utils').act;
-    assertLog = require('internal-test-utils').assertLog;
-    Scheduler = require('scheduler');
   });
 
   describe('with new explicit hydration API', () => {
-    it('should be able to adopt server markup', async () => {
+    it('should be able to adopt server markup', () => {
       class Root extends React.Component {
         render() {
           return (
@@ -70,21 +53,16 @@ describe('rendering React components at document', () => {
       const testDocument = getTestDocument(markup);
       const body = testDocument.body;
 
-      let root;
-      await act(() => {
-        root = ReactDOMClient.hydrateRoot(testDocument, <Root hello="world" />);
-      });
+      ReactDOM.hydrate(<Root hello="world" />, testDocument);
       expect(testDocument.body.innerHTML).toBe('Hello world');
 
-      await act(() => {
-        root.render(<Root hello="moon" />);
-      });
+      ReactDOM.hydrate(<Root hello="moon" />, testDocument);
       expect(testDocument.body.innerHTML).toBe('Hello moon');
 
       expect(body === testDocument.body).toBe(true);
     });
 
-    it('should be able to unmount component from document node, but leaves singleton nodes intact', async () => {
+    it('should not be able to unmount component from document node', () => {
       class Root extends React.Component {
         render() {
           return (
@@ -100,26 +78,15 @@ describe('rendering React components at document', () => {
 
       const markup = ReactDOMServer.renderToString(<Root />);
       const testDocument = getTestDocument(markup);
-      let root;
-      await act(() => {
-        root = ReactDOMClient.hydrateRoot(testDocument, <Root />);
-      });
+      ReactDOM.hydrate(<Root />, testDocument);
       expect(testDocument.body.innerHTML).toBe('Hello world');
 
-      const originalDocEl = testDocument.documentElement;
-      const originalHead = testDocument.head;
-      const originalBody = testDocument.body;
-
-      // When we unmount everything is removed except the singleton nodes of html, head, and body
-      root.unmount();
-      expect(testDocument.firstChild).toBe(originalDocEl);
-      expect(testDocument.head).toBe(originalHead);
-      expect(testDocument.body).toBe(originalBody);
-      expect(originalBody.firstChild).toEqual(null);
-      expect(originalHead.firstChild).toEqual(null);
+      // In Fiber this actually works. It might not be a good idea though.
+      ReactDOM.unmountComponentAtNode(testDocument);
+      expect(testDocument.firstChild).toBe(null);
     });
 
-    it('should not be able to switch root constructors', async () => {
+    it('should not be able to switch root constructors', () => {
       class Component extends React.Component {
         render() {
           return (
@@ -149,21 +116,17 @@ describe('rendering React components at document', () => {
       const markup = ReactDOMServer.renderToString(<Component />);
       const testDocument = getTestDocument(markup);
 
-      let root;
-      await act(() => {
-        root = ReactDOMClient.hydrateRoot(testDocument, <Component />);
-      });
+      ReactDOM.hydrate(<Component />, testDocument);
 
       expect(testDocument.body.innerHTML).toBe('Hello world');
 
-      await act(() => {
-        root.render(<Component2 />);
-      });
+      // This works but is probably a bad idea.
+      ReactDOM.hydrate(<Component2 />, testDocument);
 
       expect(testDocument.body.innerHTML).toBe('Goodbye world');
     });
 
-    it('should be able to mount into document', async () => {
+    it('should be able to mount into document', () => {
       class Component extends React.Component {
         render() {
           return (
@@ -182,72 +145,40 @@ describe('rendering React components at document', () => {
       );
       const testDocument = getTestDocument(markup);
 
-      await act(() => {
-        ReactDOMClient.hydrateRoot(
-          testDocument,
-          <Component text="Hello world" />,
-        );
-      });
+      ReactDOM.hydrate(<Component text="Hello world" />, testDocument);
 
       expect(testDocument.body.innerHTML).toBe('Hello world');
     });
 
-    it('cannot render over an existing text child at the root', async () => {
+    it('cannot render over an existing text child at the root', () => {
       const container = document.createElement('div');
       container.textContent = 'potato';
-
-      ReactDOM.flushSync(() => {
-        ReactDOMClient.hydrateRoot(container, <div>parsnip</div>, {
-          onRecoverableError: error => {
-            Scheduler.log(
-              'onRecoverableError: ' + normalizeError(error.message),
-            );
-            if (error.cause) {
-              Scheduler.log('Cause: ' + normalizeError(error.cause.message));
-            }
-          },
-        });
-      });
-
-      assertLog([
-        "onRecoverableError: Hydration failed because the server rendered HTML didn't match the client.",
-      ]);
-
+      expect(() => ReactDOM.hydrate(<div>parsnip</div>, container)).toErrorDev(
+        'Expected server HTML to contain a matching <div> in <div>.',
+      );
       // This creates an unfortunate double text case.
-      expect(container.textContent).toBe('parsnip');
+      expect(container.textContent).toBe('potatoparsnip');
     });
 
-    it('renders over an existing nested text child without throwing', async () => {
+    it('renders over an existing nested text child without throwing', () => {
       const container = document.createElement('div');
       const wrapper = document.createElement('div');
       wrapper.textContent = 'potato';
       container.appendChild(wrapper);
-      ReactDOM.flushSync(() => {
-        ReactDOMClient.hydrateRoot(
-          container,
+      expect(() =>
+        ReactDOM.hydrate(
           <div>
             <div>parsnip</div>
           </div>,
-          {
-            onRecoverableError: error => {
-              Scheduler.log(
-                'onRecoverableError: ' + normalizeError(error.message),
-              );
-              if (error.cause) {
-                Scheduler.log('Cause: ' + normalizeError(error.cause.message));
-              }
-            },
-          },
-        );
-      });
-
-      assertLog([
-        "onRecoverableError: Hydration failed because the server rendered HTML didn't match the client.",
-      ]);
+          container,
+        ),
+      ).toErrorDev(
+        'Expected server HTML to contain a matching <div> in <div>.',
+      );
       expect(container.textContent).toBe('parsnip');
     });
 
-    it('should give helpful errors on state desync', async () => {
+    it('should give helpful errors on state desync', () => {
       class Component extends React.Component {
         render() {
           return (
@@ -266,50 +197,13 @@ describe('rendering React components at document', () => {
       );
       const testDocument = getTestDocument(markup);
 
-      const favorSafetyOverHydrationPerf = gate(
-        flags => flags.favorSafetyOverHydrationPerf,
-      );
-      expect(() => {
-        ReactDOM.flushSync(() => {
-          ReactDOMClient.hydrateRoot(
-            testDocument,
-            <Component text="Hello world" />,
-            {
-              onRecoverableError: error => {
-                Scheduler.log(
-                  'onRecoverableError: ' + normalizeError(error.message),
-                );
-                if (error.cause) {
-                  Scheduler.log(
-                    'Cause: ' + normalizeError(error.cause.message),
-                  );
-                }
-              },
-            },
-          );
-        });
-      }).toErrorDev(
-        favorSafetyOverHydrationPerf
-          ? []
-          : [
-              "A tree hydrated but some attributes of the server rendered HTML didn't match the client properties.",
-            ],
-        {withoutStack: true},
-      );
-
-      assertLog(
-        favorSafetyOverHydrationPerf
-          ? [
-              "onRecoverableError: Hydration failed because the server rendered HTML didn't match the client.",
-            ]
-          : [],
-      );
-      expect(testDocument.body.innerHTML).toBe(
-        favorSafetyOverHydrationPerf ? 'Hello world' : 'Goodbye world',
-      );
+      expect(() =>
+        ReactDOM.hydrate(<Component text="Hello world" />, testDocument),
+      ).toErrorDev('Warning: Text content did not match.');
+      expect(testDocument.body.innerHTML).toBe('Hello world');
     });
 
-    it('should render w/ no markup to full document', async () => {
+    it('should render w/ no markup to full document', () => {
       const testDocument = getTestDocument();
 
       class Component extends React.Component {
@@ -325,27 +219,28 @@ describe('rendering React components at document', () => {
         }
       }
 
-      // with float the title no longer is a hydration mismatch so we get an error on the body mismatch
-      ReactDOM.flushSync(() => {
-        ReactDOMClient.hydrateRoot(
-          testDocument,
-          <Component text="Hello world" />,
-          {
-            onRecoverableError: error => {
-              Scheduler.log(
-                'onRecoverableError: ' + normalizeError(error.message),
-              );
-              if (error.cause) {
-                Scheduler.log('Cause: ' + normalizeError(error.cause.message));
-              }
-            },
-          },
-        );
-      });
-      assertLog([
-        "onRecoverableError: Hydration failed because the server rendered HTML didn't match the client.",
-      ]);
+      // getTestDocument() has an extra <meta> that we didn't render.
+      expect(() =>
+        ReactDOM.hydrate(<Component text="Hello world" />, testDocument),
+      ).toErrorDev('Did not expect server HTML to contain a <meta> in <head>.');
       expect(testDocument.body.innerHTML).toBe('Hello world');
+    });
+
+    it('supports findDOMNode on full-page components', () => {
+      const tree = (
+        <html>
+          <head>
+            <title>Hello World</title>
+          </head>
+          <body>Hello world</body>
+        </html>
+      );
+
+      const markup = ReactDOMServer.renderToString(tree);
+      const testDocument = getTestDocument(markup);
+      const component = ReactDOM.hydrate(tree, testDocument);
+      expect(testDocument.body.innerHTML).toBe('Hello world');
+      expect(ReactDOM.findDOMNode(component).tagName).toBe('HTML');
     });
   });
 });

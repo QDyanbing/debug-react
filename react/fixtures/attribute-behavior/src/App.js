@@ -213,32 +213,13 @@ function getCanonicalizedValue(value) {
 
 let _didWarn = false;
 function warn(str) {
+  if (str.includes('ReactDOM.render is no longer supported')) {
+    return;
+  }
   _didWarn = true;
 }
-
-/**
- * @param {import('react-dom/server')} serverRenderer
- */
-async function renderToString(serverRenderer, element) {
-  let didError = false;
-  const stream = await serverRenderer.renderToReadableStream(element, {
-    onError(error) {
-      didError = true;
-      console.error(error);
-    },
-  });
-  await stream.allReady;
-
-  if (didError) {
-    throw new Error('The above error occurred while rendering to string.');
-  }
-
-  const response = new Response(stream);
-  return response.text();
-}
-
 const UNKNOWN_HTML_TAGS = new Set(['keygen', 'time', 'command']);
-async function getRenderedAttributeValue(
+function getRenderedAttributeValue(
   react,
   renderer,
   serverRenderer,
@@ -256,8 +237,6 @@ async function getRenderedAttributeValue(
       return document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     } else if (containerTagName === 'document') {
       return document.implementation.createHTMLDocument('');
-    } else if (containerTagName === 'head') {
-      return document.implementation.createHTMLDocument('').head;
     } else {
       return document.createElement(containerTagName);
     }
@@ -302,22 +281,13 @@ async function getRenderedAttributeValue(
   _didWarn = false;
   try {
     let container = createContainer();
-    renderer.flushSync(() => {
-      renderer
-        .createRoot(container)
-        .render(react.createElement(tagName, baseProps));
-    });
-    defaultValue = read(container.lastChild);
+    renderer.render(react.createElement(tagName, baseProps), container);
+    defaultValue = read(container.firstChild);
     canonicalDefaultValue = getCanonicalizedValue(defaultValue);
 
     container = createContainer();
-
-    renderer.flushSync(() => {
-      renderer
-        .createRoot(container)
-        .render(react.createElement(tagName, props));
-    });
-    result = read(container.lastChild);
+    renderer.render(react.createElement(tagName, props), container);
+    result = read(container.firstChild);
     canonicalResult = getCanonicalizedValue(result);
     didWarn = _didWarn;
     didError = false;
@@ -333,22 +303,13 @@ async function getRenderedAttributeValue(
   try {
     let container;
     if (containerTagName === 'document') {
-      const html = await renderToString(
-        serverRenderer,
-        react.createElement(tagName, props)
-      );
-      container = createContainer();
-      container.innerHTML = html;
-    } else if (containerTagName === 'head') {
-      const html = await renderToString(
-        serverRenderer,
+      const html = serverRenderer.renderToString(
         react.createElement(tagName, props)
       );
       container = createContainer();
       container.innerHTML = html;
     } else {
-      const html = await renderToString(
-        serverRenderer,
+      const html = serverRenderer.renderToString(
         react.createElement(
           containerTagName,
           null,
@@ -357,8 +318,7 @@ async function getRenderedAttributeValue(
       );
       const outerContainer = document.createElement('div');
       outerContainer.innerHTML = html;
-      // Float may prepend `<link />`
-      container = outerContainer.lastChild;
+      container = outerContainer.firstChild;
     }
 
     if (
@@ -428,8 +388,8 @@ async function getRenderedAttributeValue(
   };
 }
 
-async function prepareState(initGlobals) {
-  async function getRenderedAttributeValues(attribute, type) {
+function prepareState(initGlobals) {
+  function getRenderedAttributeValues(attribute, type) {
     const {
       ReactStable,
       ReactDOMStable,
@@ -438,14 +398,14 @@ async function prepareState(initGlobals) {
       ReactDOMNext,
       ReactDOMServerNext,
     } = initGlobals(attribute, type);
-    const reactStableValue = await getRenderedAttributeValue(
+    const reactStableValue = getRenderedAttributeValue(
       ReactStable,
       ReactDOMStable,
       ReactDOMServerStable,
       attribute,
       type
     );
-    const reactNextValue = await getRenderedAttributeValue(
+    const reactNextValue = getRenderedAttributeValue(
       ReactNext,
       ReactDOMNext,
       ReactDOMServerNext,
@@ -483,7 +443,7 @@ async function prepareState(initGlobals) {
     let hasSameBehaviorForAll = true;
     let rowPatternHash = '';
     for (let type of types) {
-      const result = await getRenderedAttributeValues(attribute, type);
+      const result = getRenderedAttributeValues(attribute, type);
       results.set(type.name, result);
       if (!result.hasSameBehavior) {
         hasSameBehaviorForAll = false;
@@ -807,7 +767,7 @@ class App extends React.Component {
         'https://unpkg.com/react-dom@latest/umd/react-dom-server.browser.development.js',
       ReactNext: '/react.development.js',
       ReactDOMNext: '/react-dom.development.js',
-      ReactDOMServerNext: '/react-dom-server.browser.development.js',
+      ReactDOMServerNext: '/react-dom-server-legacy.browser.development.js',
     };
     const codePromises = Object.values(sources).map(src =>
       fetch(src).then(res => res.text())
@@ -852,7 +812,7 @@ class App extends React.Component {
       return globals;
     }
 
-    const {table, rowPatternHashes} = await prepareState(initGlobals);
+    const {table, rowPatternHashes} = prepareState(initGlobals);
     document.title = 'Ready';
 
     this.setState({
@@ -942,9 +902,8 @@ class App extends React.Component {
 
     let log = '';
     for (let attribute of attributes) {
-      log += `## \`${attribute.name}\` (on \`<${
-        attribute.tagName || 'div'
-      }>\` inside \`<${attribute.containerTagName || 'div'}>\`)\n`;
+      log += `## \`${attribute.name}\` (on \`<${attribute.tagName ||
+        'div'}>\` inside \`<${attribute.containerTagName || 'div'}>\`)\n`;
       log += '| Test Case | Flags | Result |\n';
       log += '| --- | --- | --- |\n';
 

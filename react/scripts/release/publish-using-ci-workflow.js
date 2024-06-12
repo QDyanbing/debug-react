@@ -9,10 +9,7 @@ const CIRCLE_TOKEN = process.env.CIRCLE_CI_API_TOKEN;
 
 if (!CIRCLE_TOKEN) {
   console.error(
-    theme.error(
-      'Missing required environment variable: CIRCLE_CI_API_TOKEN\n' +
-        'Grab it here: https://app.circleci.com/settings/user/tokens'
-    )
+    theme.error('Missing required environment variable: CIRCLE_CI_API_TOKEN')
   );
   process.exit(1);
 }
@@ -101,15 +98,6 @@ async function main() {
       },
     }
   );
-
-  if (!pipelineResponse.ok) {
-    console.error(
-      theme.error(
-        `Failed to access CircleCI. Responded with status: ${pipelineResponse.status}`
-      )
-    );
-    process.exit(1);
-  }
 
   const pipelineJSON = await pipelineResponse.json();
   const pipelineID = pipelineJSON.id;

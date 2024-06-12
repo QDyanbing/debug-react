@@ -1,5 +1,5 @@
 const {resolve} = require('path');
-const Webpack = require('webpack');
+const {DefinePlugin} = require('webpack');
 const {
   DARK_MODE_DIMMED_WARNING_COLOR,
   DARK_MODE_DIMMED_ERROR_COLOR,
@@ -47,7 +47,7 @@ const babelOptions = {
 
 module.exports = {
   mode: __DEV__ ? 'development' : 'production',
-  devtool: __DEV__ ? 'eval-cheap-module-source-map' : 'source-map',
+  devtool: __DEV__ ? 'cheap-module-eval-source-map' : 'source-map',
   target: 'electron-main',
   entry: {
     standalone: './src/standalone.js',
@@ -56,13 +56,8 @@ module.exports = {
     path: __dirname + '/dist',
     filename: '[name].js',
     chunkFilename: '[name].chunk.js',
-    library: {
-      type: 'commonjs2',
-    },
-  },
-  externals: {
-    bufferutil: 'commonjs bufferutil',
-    'utf-8-validate': 'commonjs utf-8-validate',
+    library: '[name]',
+    libraryTarget: 'commonjs2',
   },
   resolve: {
     alias: {
@@ -80,14 +75,9 @@ module.exports = {
     // This would break the standalone DevTools ability to load the backend.
     // see https://github.com/facebook/react-devtools/issues/1269
     __dirname: false,
-
-    global: false,
   },
   plugins: [
-    new Webpack.ProvidePlugin({
-      process: 'process/browser',
-    }),
-    new Webpack.DefinePlugin({
+    new DefinePlugin({
       __DEV__,
       __EXPERIMENTAL__: true,
       __EXTENSION__: false,

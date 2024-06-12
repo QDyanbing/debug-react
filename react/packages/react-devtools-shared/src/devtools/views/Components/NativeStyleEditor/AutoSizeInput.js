@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -16,6 +16,7 @@ type Props = {
   placeholder?: string,
   testName?: ?string,
   value: any,
+  ...
 };
 
 export default function AutoSizeInput({
@@ -25,8 +26,7 @@ export default function AutoSizeInput({
   testName,
   value,
   ...rest
-}: Props): React.Node {
-  // $FlowFixMe[missing-local-annot]
+}: Props) {
   const onFocusWrapper = event => {
     const input = event.target;
     if (input !== null) {
@@ -42,7 +42,6 @@ export default function AutoSizeInput({
   const isEmpty = value === '' || value === '""';
 
   return (
-    // $FlowFixMe[cannot-spread-inexact] unsafe rest spread
     <input
       className={[styles.Input, className].join(' ')}
       data-testname={testName}

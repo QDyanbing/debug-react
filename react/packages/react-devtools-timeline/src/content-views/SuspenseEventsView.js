@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -72,7 +72,7 @@ export class SuspenseEventsView extends View {
       if (!this._depthToSuspenseEvent.has(depth)) {
         this._depthToSuspenseEvent.set(depth, [event]);
       } else {
-        // $FlowFixMe[incompatible-use] This is unnecessary.
+        // $FlowFixMe This is unnecessary.
         this._depthToSuspenseEvent.get(depth).push(event);
       }
     });
@@ -85,7 +85,7 @@ export class SuspenseEventsView extends View {
     };
   }
 
-  desiredSize(): IntrinsicSize {
+  desiredSize() {
     return this._intrinsicSize;
   }
 

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -9,8 +9,8 @@
 
 import * as React from 'react';
 import {useContext} from 'react';
-
-import {ProfilerContext} from './ProfilerContext';
+import {enableProfilerChangedHookIndices} from 'react-devtools-feature-flags';
+import {ProfilerContext} from '../Profiler/ProfilerContext';
 import {StoreContext} from '../context';
 
 import styles from './WhatChanged.css';
@@ -33,11 +33,11 @@ function hookIndicesToString(indices: Array<number>): string {
   }
 }
 
-type Props = {
+type Props = {|
   fiberID: number,
-};
+|};
 
-export default function WhatChanged({fiberID}: Props): React.Node {
+export default function WhatChanged({fiberID}: Props) {
   const {profilerStore} = useContext(StoreContext);
   const {rootID, selectedCommitIndex} = useContext(ProfilerContext);
 
@@ -63,8 +63,14 @@ export default function WhatChanged({fiberID}: Props): React.Node {
     return null;
   }
 
-  const {context, didHooksChange, hooks, isFirstMount, props, state} =
-    changeDescription;
+  const {
+    context,
+    didHooksChange,
+    hooks,
+    isFirstMount,
+    props,
+    state,
+  } = changeDescription;
 
   if (isFirstMount) {
     return (
@@ -103,7 +109,7 @@ export default function WhatChanged({fiberID}: Props): React.Node {
   }
 
   if (didHooksChange) {
-    if (Array.isArray(hooks)) {
+    if (enableProfilerChangedHookIndices && Array.isArray(hooks)) {
       changes.push(
         <div key="hooks" className={styles.Item}>
           • {hookIndicesToString(hooks)}
@@ -153,7 +159,7 @@ export default function WhatChanged({fiberID}: Props): React.Node {
   }
 
   return (
-    <div>
+    <div className={styles.Component}>
       <label className={styles.Label}>Why did this render?</label>
       {changes}
     </div>

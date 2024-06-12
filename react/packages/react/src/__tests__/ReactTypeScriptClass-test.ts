@@ -5,7 +5,7 @@
 /// <reference path="./testDefinitions/ReactInternalAct.d.ts" />
 
 /*!
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -14,8 +14,9 @@
 import React = require('react');
 import ReactDOM = require('react-dom');
 import ReactDOMClient = require('react-dom/client');
+import ReactDOMTestUtils = require('react-dom/test-utils');
 import PropTypes = require('prop-types');
-import ReactFeatureFlags = require('shared/ReactFeatureFlags');
+import internalAct = require('jest-react');
 
 // Before Each
 
@@ -23,6 +24,7 @@ let container;
 let root;
 let attachedListener = null;
 let renderedName = null;
+let act = internalAct.act;
 
 class Inner extends React.Component {
   getName() {
@@ -36,7 +38,7 @@ class Inner extends React.Component {
 }
 
 function test(element, expectedTag, expectedClassName) {
-  ReactDOM.flushSync(() => root.render(element));
+  act(() => root.render(element));
   expect(container.firstChild).not.toBeNull();
   expect(container.firstChild.tagName).toBe(expectedTag);
   expect(container.firstChild.className).toBe(expectedClassName);
@@ -327,27 +329,21 @@ describe('ReactTypeScriptClass', function() {
   });
 
   it('throws if no render function is defined', function() {
-    class Foo extends React.Component {}
-    const caughtErrors = [];
-    function errorHandler(event) {
-      event.preventDefault();
-      caughtErrors.push(event.error);
-    }
-    window.addEventListener('error', errorHandler);
-    try {
-      expect(() => {
-        ReactDOM.flushSync(() => root.render(React.createElement(Empty)))
-      }).toErrorDev([
-        // A failed component renders twice in DEV in concurrent mode
-        'No `render` method found on the Empty instance: ' +
-          'you may have forgotten to define `render`.',
-        'No `render` method found on the Empty instance: ' +
-          'you may have forgotten to define `render`.',
-      ]);
-    } finally {
-      window.removeEventListener('error', errorHandler);
-    }
-    expect(caughtErrors.length).toBe(1);
+    expect(() => {
+      expect(() =>
+        act(() => root.render(React.createElement(Empty)))
+      ).toThrow();
+    }).toErrorDev([
+      // A failed component renders four times in DEV in concurrent mode
+      'Warning: Empty(...): No `render` method found on the returned ' +
+        'component instance: you may have forgotten to define `render`.',
+      'Warning: Empty(...): No `render` method found on the returned ' +
+        'component instance: you may have forgotten to define `render`.',
+      'Warning: Empty(...): No `render` method found on the returned ' +
+        'component instance: you may have forgotten to define `render`.',
+      'Warning: Empty(...): No `render` method found on the returned ' +
+        'component instance: you may have forgotten to define `render`.',
+    ]);
   });
 
   it('renders a simple stateless component with prop', function() {
@@ -370,7 +366,7 @@ describe('ReactTypeScriptClass', function() {
       'DIV',
       'foo'
     );
-    ReactDOM.flushSync(() => ref.current.changeState());
+    act(() => ref.current.changeState());
     test(React.createElement(StateBasedOnProps), 'SPAN', 'bar');
   });
 
@@ -405,7 +401,7 @@ describe('ReactTypeScriptClass', function() {
       }
     }
     expect(function() {
-      ReactDOM.flushSync(() =>
+      act(() =>
         root.render(React.createElement(Foo, {foo: 'foo'}))
       );
     }).toErrorDev(
@@ -424,7 +420,7 @@ describe('ReactTypeScriptClass', function() {
       }
     }
     expect(function() {
-      ReactDOM.flushSync(() =>
+      act(() =>
         root.render(React.createElement(Foo, {foo: 'foo'}))
       );
     }).toErrorDev(
@@ -441,7 +437,7 @@ describe('ReactTypeScriptClass', function() {
       }
     }
     expect(function() {
-      ReactDOM.flushSync(() =>
+      act(() =>
         root.render(React.createElement(Foo, {foo: 'foo'}))
       );
     }).toErrorDev(
@@ -465,7 +461,7 @@ describe('ReactTypeScriptClass', function() {
       }
     }
     expect(function() {
-      ReactDOM.flushSync(() =>
+      act(() =>
         root.render(React.createElement(Foo, {foo: 'foo'}))
       );
     }).toErrorDev(
@@ -517,16 +513,16 @@ describe('ReactTypeScriptClass', function() {
     test(React.createElement(Foo, {update: true}), 'DIV', 'updated');
   });
 
-  if (!ReactFeatureFlags.disableLegacyContext) {
-    it('renders based on context in the constructor', function() {
-      test(React.createElement(ProvideChildContextTypes), 'SPAN', 'foo');
-    });
-  }
+  it('renders based on context in the constructor', function() {
+    test(React.createElement(ProvideChildContextTypes), 'SPAN', 'foo');
+  });
 
   it('renders only once when setting state in componentWillMount', function() {
     renderCount = 0;
     test(React.createElement(RenderOnce, {initialValue: 'foo'}), 'SPAN', 'bar');
-    expect(renderCount).toBe(1);
+    // This is broken with deferRenderPhaseUpdateToNextBatch flag on.
+    // We can't use the gate feature in TypeScript.
+    expect(renderCount).toBe(global.__WWW__ && !global.__VARIANT__ ? 2 : 1);
   });
 
   it('should warn with non-object in the initial state property', function() {
@@ -551,7 +547,7 @@ describe('ReactTypeScriptClass', function() {
       'DIV',
       'foo'
     );
-    ReactDOM.flushSync(() => attachedListener());
+    act(() => attachedListener());
     expect(renderedName).toBe('bar');
   });
 
@@ -570,7 +566,7 @@ describe('ReactTypeScriptClass', function() {
       'DIV',
       'foo'
     );
-    ReactDOM.flushSync(() => attachedListener());
+    act(() => attachedListener());
     expect(renderedName).toBe('bar');
   });
 
@@ -594,33 +590,31 @@ describe('ReactTypeScriptClass', function() {
       {},
     ]);
     lifeCycles = []; // reset
-    ReactDOM.flushSync(() => root.unmount(container));
+    act(() => root.unmount(container));
     expect(lifeCycles).toEqual(['will-unmount']);
   });
 
-  if (!ReactFeatureFlags.disableLegacyContext) {
-    it(
-      'warns when classic properties are defined on the instance, ' +
-        'but does not invoke them.',
-      function() {
-        getInitialStateWasCalled = false;
-        getDefaultPropsWasCalled = false;
-        expect(() =>
-          test(React.createElement(ClassicProperties), 'SPAN', 'foo')
-        ).toErrorDev([
-          'getInitialState was defined on ClassicProperties, ' +
-            'a plain JavaScript class.',
-          'getDefaultProps was defined on ClassicProperties, ' +
-            'a plain JavaScript class.',
-          'propTypes was defined as an instance property on ClassicProperties.',
-          'contextTypes was defined as an instance property on ClassicProperties.',
-          'contextType was defined as an instance property on ClassicProperties.',
-        ]);
-        expect(getInitialStateWasCalled).toBe(false);
-        expect(getDefaultPropsWasCalled).toBe(false);
-      }
-    );
-  }
+  it(
+    'warns when classic properties are defined on the instance, ' +
+      'but does not invoke them.',
+    function() {
+      getInitialStateWasCalled = false;
+      getDefaultPropsWasCalled = false;
+      expect(() =>
+        test(React.createElement(ClassicProperties), 'SPAN', 'foo')
+      ).toErrorDev([
+        'getInitialState was defined on ClassicProperties, ' +
+          'a plain JavaScript class.',
+        'getDefaultProps was defined on ClassicProperties, ' +
+          'a plain JavaScript class.',
+        'propTypes was defined as an instance property on ClassicProperties.',
+        'contextTypes was defined as an instance property on ClassicProperties.',
+        'contextType was defined as an instance property on ClassicProperties.',
+      ]);
+      expect(getInitialStateWasCalled).toBe(false);
+      expect(getDefaultPropsWasCalled).toBe(false);
+    }
+  );
 
   it(
     'does not warn about getInitialState() on class components ' +
@@ -644,7 +638,7 @@ describe('ReactTypeScriptClass', function() {
     expect(() =>
       test(React.createElement(MisspelledComponent1), 'SPAN', 'foo')
     ).toErrorDev(
-      '' +
+      'Warning: ' +
         'MisspelledComponent1 has a method called componentShouldUpdate(). Did ' +
         'you mean shouldComponentUpdate()? The name is phrased as a question ' +
         'because the function is expected to return a value.'
@@ -655,7 +649,7 @@ describe('ReactTypeScriptClass', function() {
     expect(() =>
       test(React.createElement(MisspelledComponent2), 'SPAN', 'foo')
     ).toErrorDev(
-      '' +
+      'Warning: ' +
         'MisspelledComponent2 has a method called componentWillRecieveProps(). ' +
         'Did you mean componentWillReceiveProps()?'
     );
@@ -665,7 +659,7 @@ describe('ReactTypeScriptClass', function() {
     expect(() =>
       test(React.createElement(MisspelledComponent3), 'SPAN', 'foo')
     ).toErrorDev(
-      '' +
+      'Warning: ' +
         'MisspelledComponent3 has a method called UNSAFE_componentWillRecieveProps(). ' +
         'Did you mean UNSAFE_componentWillReceiveProps()?'
     );
@@ -688,25 +682,20 @@ describe('ReactTypeScriptClass', function() {
     );
   });
 
-  if (!ReactFeatureFlags.disableLegacyContext) {
-    it('supports this.context passed via getChildContext', function() {
-      test(React.createElement(ProvideContext), 'DIV', 'bar-through-context');
-    });
-  }
+  it('supports this.context passed via getChildContext', function() {
+    test(React.createElement(ProvideContext), 'DIV', 'bar-through-context');
+  });
 
-  if (!ReactFeatureFlags.disableStringRefs) {
-    it('supports string refs', function() {
-      const ref = React.createRef();
-      expect(() => {
-        test(React.createElement(ClassicRefs, {ref: ref}), 'DIV', 'foo');
-      }).toErrorDev([
-        'Component "ClassicRefs" contains the string ref "inner". ' +
-          'Support for string refs will be removed in a future major release. ' +
-          'We recommend using useRef() or createRef() instead. ' +
-          'Learn more about using refs safely here: https://react.dev/link/strict-mode-string-ref\n' +
-          '    in Inner (at **)',
-      ]);
-      expect(ref.current.refs.inner.getName()).toBe('foo');
-    });
-  }
+  it('supports classic refs', function() {
+    const ref = React.createRef();
+    test(React.createElement(ClassicRefs, {ref: ref}), 'DIV', 'foo');
+    expect(ref.current.refs.inner.getName()).toBe('foo');
+  });
+
+  it('supports drilling through to the DOM using findDOMNode', function() {
+    const ref = React.createRef();
+    test(React.createElement(Inner, {name: 'foo', ref: ref}), 'DIV', 'foo');
+    const node = ReactDOM.findDOMNode(ref.current);
+    expect(node).toBe(container.firstChild);
+  });
 });

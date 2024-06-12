@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -11,23 +11,17 @@ import type {
   Lane,
   Lanes,
   DevToolsProfilingHooks,
-  WorkTagMap,
-  CurrentDispatcherRef,
 } from 'react-devtools-shared/src/backend/types';
 import type {Fiber} from 'react-reconciler/src/ReactInternalTypes';
 import type {Wakeable} from 'shared/ReactTypes';
 import type {
   BatchUID,
-  InternalModuleSourceToRanges,
   LaneToLabelMap,
   ReactComponentMeasure,
-  ReactLane,
   ReactMeasure,
   ReactMeasureType,
-  ReactScheduleStateUpdateEvent,
-  SchedulingEvent,
-  SuspenseEvent,
   TimelineData,
+  SuspenseEvent,
 } from 'react-devtools-timeline/src/types';
 
 import isArray from 'shared/isArray';
@@ -35,7 +29,6 @@ import {
   REACT_TOTAL_NUM_LANES,
   SCHEDULING_PROFILER_VERSION,
 } from 'react-devtools-timeline/src/constants';
-import {describeFiber} from './DevToolsFiberComponentStack';
 
 // Add padding to the start/stop time of the profile.
 // This makes the UI nicer to use.
@@ -46,27 +39,24 @@ let performanceTarget: Performance | null = null;
 // If performance exists and supports the subset of the User Timing API that we require.
 let supportsUserTiming =
   typeof performance !== 'undefined' &&
-  // $FlowFixMe[method-unbinding]
   typeof performance.mark === 'function' &&
-  // $FlowFixMe[method-unbinding]
   typeof performance.clearMarks === 'function';
 
 let supportsUserTimingV3 = false;
 if (supportsUserTiming) {
   const CHECK_V3_MARK = '__v3';
-  const markOptions: {
-    detail?: mixed,
-    startTime?: number,
-  } = {};
+  const markOptions = {};
+  // $FlowFixMe: Ignore Flow complaining about needing a value
   Object.defineProperty(markOptions, 'startTime', {
-    get: function () {
+    get: function() {
       supportsUserTimingV3 = true;
       return 0;
     },
-    set: function () {},
+    set: function() {},
   });
 
   try {
+    // $FlowFixMe: Flow expects the User Timing level 2 API.
     performance.mark(CHECK_V3_MARK, markOptions);
   } catch (error) {
     // Ignore
@@ -81,7 +71,6 @@ if (supportsUserTimingV3) {
 
 // Some environments (e.g. React Native / Hermes) don't support the performance API yet.
 const getCurrentTime =
-  // $FlowFixMe[method-unbinding]
   typeof performance === 'object' && typeof performance.now === 'function'
     ? () => performance.now()
     : () => Date.now();
@@ -99,32 +88,27 @@ export function setPerformanceMock_ONLY_FOR_TESTING(
 export type GetTimelineData = () => TimelineData | null;
 export type ToggleProfilingStatus = (value: boolean) => void;
 
-type Response = {
+type Response = {|
   getTimelineData: GetTimelineData,
   profilingHooks: DevToolsProfilingHooks,
   toggleProfilingStatus: ToggleProfilingStatus,
-};
+|};
 
 export function createProfilingHooks({
   getDisplayNameForFiber,
   getIsProfiling,
   getLaneLabelMap,
-  workTagMap,
-  currentDispatcherRef,
   reactVersion,
-}: {
+}: {|
   getDisplayNameForFiber: (fiber: Fiber) => string | null,
   getIsProfiling: () => boolean,
   getLaneLabelMap?: () => Map<Lane, string> | null,
-  currentDispatcherRef?: CurrentDispatcherRef,
-  workTagMap: WorkTagMap,
   reactVersion: string,
-}): Response {
+|}): Response {
   let currentBatchUID: BatchUID = 0;
   let currentReactComponentMeasure: ReactComponentMeasure | null = null;
   let currentReactMeasuresStack: Array<ReactMeasure> = [];
   let currentTimelineData: TimelineData | null = null;
-  let currentFiberStacks: Map<SchedulingEvent, Array<Fiber>> = new Map();
   let isProfiling: boolean = false;
   let nextRenderShouldStartNewBatch: boolean = false;
 
@@ -208,7 +192,7 @@ export function createProfilingHooks({
     }
   }
 
-  function markAndClear(markName: string) {
+  function markAndClear(markName) {
     // This method won't be called unless these functions are defined, so we can skip the extra typeof check.
     ((performanceTarget: any): Performance).mark(markName);
     ((performanceTarget: any): Performance).clearMarks(markName);
@@ -241,8 +225,10 @@ export function createProfilingHooks({
     currentReactMeasuresStack.push(reactMeasure);
 
     if (currentTimelineData) {
-      const {batchUIDToMeasuresMap, laneToReactMeasureMap} =
-        currentTimelineData;
+      const {
+        batchUIDToMeasuresMap,
+        laneToReactMeasureMap,
+      } = currentTimelineData;
 
       let reactMeasures = batchUIDToMeasuresMap.get(currentBatchUID);
       if (reactMeasures != null) {
@@ -283,7 +269,7 @@ export function createProfilingHooks({
       );
     }
 
-    // $FlowFixMe[cannot-write] This property should not be writable outside of this function.
+    // $FlowFixMe This property should not be writable outside of this function.
     top.duration = currentTime - top.timestamp;
 
     if (currentTimelineData) {
@@ -354,9 +340,7 @@ export function createProfilingHooks({
           );
         }
 
-        // $FlowFixMe[incompatible-use] found when upgrading Flow
         currentReactComponentMeasure.duration =
-          // $FlowFixMe[incompatible-use] found when upgrading Flow
           getRelativeTime() - currentReactComponentMeasure.timestamp;
         currentReactComponentMeasure = null;
       }
@@ -399,9 +383,7 @@ export function createProfilingHooks({
           );
         }
 
-        // $FlowFixMe[incompatible-use] found when upgrading Flow
         currentReactComponentMeasure.duration =
-          // $FlowFixMe[incompatible-use] found when upgrading Flow
           getRelativeTime() - currentReactComponentMeasure.timestamp;
         currentReactComponentMeasure = null;
       }
@@ -446,9 +428,7 @@ export function createProfilingHooks({
           );
         }
 
-        // $FlowFixMe[incompatible-use] found when upgrading Flow
         currentReactComponentMeasure.duration =
-          // $FlowFixMe[incompatible-use] found when upgrading Flow
           getRelativeTime() - currentReactComponentMeasure.timestamp;
         currentReactComponentMeasure = null;
       }
@@ -491,9 +471,7 @@ export function createProfilingHooks({
           );
         }
 
-        // $FlowFixMe[incompatible-use] found when upgrading Flow
         currentReactComponentMeasure.duration =
-          // $FlowFixMe[incompatible-use] found when upgrading Flow
           getRelativeTime() - currentReactComponentMeasure.timestamp;
         currentReactComponentMeasure = null;
       }
@@ -538,9 +516,7 @@ export function createProfilingHooks({
           );
         }
 
-        // $FlowFixMe[incompatible-use] found when upgrading Flow
         currentReactComponentMeasure.duration =
-          // $FlowFixMe[incompatible-use] found when upgrading Flow
           getRelativeTime() - currentReactComponentMeasure.timestamp;
         currentReactComponentMeasure = null;
       }
@@ -592,7 +568,7 @@ export function createProfilingHooks({
 
   const PossiblyWeakMap = typeof WeakMap === 'function' ? WeakMap : Map;
 
-  // $FlowFixMe[incompatible-type]: Flow cannot handle polymorphic WeakMaps
+  // $FlowFixMe: Flow cannot handle polymorphic WeakMaps
   const wakeableIDs: WeakMap<Wakeable, number> = new PossiblyWeakMap();
   let wakeableID: number = 0;
   function getWakeableID(wakeable: Wakeable): number {
@@ -798,16 +774,6 @@ export function createProfilingHooks({
     }
   }
 
-  function getParentFibers(fiber: Fiber): Array<Fiber> {
-    const parents = [];
-    let parent: null | Fiber = fiber;
-    while (parent !== null) {
-      parents.push(parent);
-      parent = parent.return;
-    }
-    return parents;
-  }
-
   function markStateUpdateScheduled(fiber: Fiber, lane: Lane): void {
     if (isProfiling || supportsUserTimingV3) {
       const componentName = getDisplayNameForFiber(fiber) || 'Unknown';
@@ -815,18 +781,13 @@ export function createProfilingHooks({
       if (isProfiling) {
         // TODO (timeline) Record and cache component stack
         if (currentTimelineData) {
-          const event: ReactScheduleStateUpdateEvent = {
+          currentTimelineData.schedulingEvents.push({
             componentName,
-            // Store the parent fibers so we can post process
-            // them after we finish profiling
             lanes: laneToLanesArray(lane),
             timestamp: getRelativeTime(),
             type: 'schedule-state-update',
             warning: null,
-          };
-          currentFiberStacks.set(event, getParentFibers(fiber));
-          // $FlowFixMe[incompatible-use] found when upgrading Flow
-          currentTimelineData.schedulingEvents.push(event);
+          });
         }
       }
 
@@ -841,8 +802,7 @@ export function createProfilingHooks({
       isProfiling = value;
 
       if (isProfiling) {
-        const internalModuleSourceToRanges: InternalModuleSourceToRanges =
-          new Map();
+        const internalModuleSourceToRanges = new Map();
 
         if (supportsUserTimingV3) {
           const ranges = getInternalModuleRanges();
@@ -861,7 +821,7 @@ export function createProfilingHooks({
           }
         }
 
-        const laneToReactMeasureMap = new Map<ReactLane, ReactMeasure[]>();
+        const laneToReactMeasureMap = new Map();
         let lane = 1;
         for (let index = 0; index < REACT_TOTAL_NUM_LANES; index++) {
           laneToReactMeasureMap.set(lane, []);
@@ -871,7 +831,6 @@ export function createProfilingHooks({
         currentBatchUID = 0;
         currentReactComponentMeasure = null;
         currentReactMeasuresStack = [];
-        currentFiberStacks = new Map();
         currentTimelineData = {
           // Session wide metadata; only collected once.
           internalModuleSourceToRanges,
@@ -899,30 +858,6 @@ export function createProfilingHooks({
           snapshotHeight: 0,
         };
         nextRenderShouldStartNewBatch = true;
-      } else {
-        // Postprocess Profile data
-        if (currentTimelineData !== null) {
-          currentTimelineData.schedulingEvents.forEach(event => {
-            if (event.type === 'schedule-state-update') {
-              // TODO(luna): We can optimize this by creating a map of
-              // fiber to component stack instead of generating the stack
-              // for every fiber every time
-              const fiberStack = currentFiberStacks.get(event);
-              if (fiberStack && currentDispatcherRef != null) {
-                event.componentStack = fiberStack.reduce((trace, fiber) => {
-                  return (
-                    trace +
-                    describeFiber(workTagMap, fiber, currentDispatcherRef)
-                  );
-                }, '');
-              }
-            }
-          });
-        }
-
-        // Clear the current fiber stacks so we don't hold onto the fibers
-        // in memory after profiling finishes
-        currentFiberStacks.clear();
       }
     }
   }

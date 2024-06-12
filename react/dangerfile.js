@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -31,7 +31,6 @@ const {markdown, danger, warn} = require('danger');
 const {promisify} = require('util');
 const glob = promisify(require('glob'));
 const gzipSize = require('gzip-size');
-const {writeFileSync} = require('fs');
 
 const {readFileSync, statSync} = require('fs');
 
@@ -42,13 +41,12 @@ const CRITICAL_THRESHOLD = 0.02;
 const SIGNIFICANCE_THRESHOLD = 0.002;
 const CRITICAL_ARTIFACT_PATHS = new Set([
   // We always report changes to these bundles, even if the change is
-  // insignificant or non-existent.
-  'oss-stable/react-dom/cjs/react-dom.production.js',
-  'oss-stable/react-dom/cjs/react-dom-client.production.js',
-  'oss-experimental/react-dom/cjs/react-dom.production.js',
-  'oss-experimental/react-dom/cjs/react-dom-client.production.js',
+  // insiginificant or non-existent.
+  'oss-stable/react-dom/cjs/react-dom.production.min.js',
+  'oss-experimental/react-dom/cjs/react-dom.production.min.js',
   'facebook-www/ReactDOM-prod.classic.js',
   'facebook-www/ReactDOM-prod.modern.js',
+  'facebook-www/ReactDOMForked-prod.classic.js',
 ]);
 
 const kilobyteFormatter = new Intl.NumberFormat('en', {
@@ -86,21 +84,12 @@ const header = `
   | Name | +/- | Base | Current | +/- gzip | Base gzip | Current gzip |
   | ---- | --- | ---- | ------- | -------- | --------- | ------------ |`;
 
-function row(result, baseSha, headSha) {
-  const diffViewUrl = `https://react-builds.vercel.app/commits/${headSha}/files/${result.path}?compare=${baseSha}`;
-  const rowArr = [
-    `| [${result.path}](${diffViewUrl})`,
-    `**${change(result.change)}**`,
-    `${kbs(result.baseSize)}`,
-    `${kbs(result.headSize)}`,
-    `${change(result.changeGzip)}`,
-    `${kbs(result.baseSizeGzip)}`,
-    `${kbs(result.headSizeGzip)}`,
-  ];
-  return rowArr.join(' | ');
+function row(result) {
+  // prettier-ignore
+  return `| ${result.path} | **${change(result.change)}** | ${kbs(result.baseSize)} | ${kbs(result.headSize)} | ${change(result.changeGzip)} | ${kbs(result.baseSizeGzip)} | ${kbs(result.headSizeGzip)}`;
 }
 
-(async function () {
+(async function() {
   // Use git locally to grab the commit which represents the place
   // where the branches differ
 
@@ -207,7 +196,7 @@ function row(result, baseSha, headSha) {
           artifactPath
       );
     }
-    criticalResults.push(row(result, baseSha, headSha));
+    criticalResults.push(row(result));
   }
 
   let significantResults = [];
@@ -223,7 +212,7 @@ function row(result, baseSha, headSha) {
       // Skip critical artifacts. We added those earlier, in a fixed order.
       !CRITICAL_ARTIFACT_PATHS.has(result.path)
     ) {
-      criticalResults.push(row(result, baseSha, headSha));
+      criticalResults.push(row(result));
     }
 
     // Do the same for results that exceed the significant threshold. These
@@ -235,18 +224,17 @@ function row(result, baseSha, headSha) {
       result.change === Infinity ||
       result.change === -1
     ) {
-      significantResults.push(row(result, baseSha, headSha));
+      significantResults.push(row(result));
     }
   }
 
-  const message = `
+  markdown(`
 Comparing: ${baseSha}...${headSha}
 
 ## Critical size changes
 
-Includes critical production bundles, as well as any change greater than ${
-    CRITICAL_THRESHOLD * 100
-  }%:
+Includes critical production bundles, as well as any change greater than ${CRITICAL_THRESHOLD *
+    100}%:
 
 ${header}
 ${criticalResults.join('\n')}
@@ -266,17 +254,5 @@ ${significantResults.join('\n')}
 `
     : '(No significant changes)'
 }
-`;
-
-  // GitHub comments are limited to 65536 characters.
-  if (message.length > 65536) {
-    // Make message available as an artifact
-    writeFileSync('sizebot-message.md', message);
-    markdown(
-      'The size diff is too large to display in a single comment. ' +
-        `The [CircleCI job](${process.env.CIRCLE_BUILD_URL}) contains an artifact called 'sizebot-message.md' with the full message.`
-    );
-  } else {
-    markdown(message);
-  }
+`);
 })();

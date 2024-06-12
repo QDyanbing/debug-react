@@ -1,11 +1,4 @@
-import {BabelClass, BabelClassWithFields} from './BabelClasses-compiled.js';
-import {
-  Throw,
-  Component,
-  DisplayName,
-  NativeClass,
-  FrozenClass,
-} from './Components.js';
+// Example
 
 const x = React.createElement;
 
@@ -36,7 +29,7 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-export default function Example() {
+function Example() {
   let state = React.useState(false);
   return x(
     ErrorBoundary,
@@ -45,21 +38,25 @@ export default function Example() {
       DisplayName,
       null,
       x(
-        NativeClass,
+        React.SuspenseList,
         null,
         x(
-          FrozenClass,
+          NativeClass,
           null,
           x(
-            BabelClass,
+            FrozenClass,
             null,
             x(
-              BabelClassWithFields,
+              BabelClass,
               null,
               x(
-                React.Suspense,
+                BabelClassWithFields,
                 null,
-                x('div', null, x(Component, null, x(Throw)))
+                x(
+                  React.Suspense,
+                  null,
+                  x('div', null, x(Component, null, x(Throw)))
+                )
               )
             )
           )

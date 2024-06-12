@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -13,10 +13,10 @@ import type {
   MeasureInWindowOnSuccessCallback,
   MeasureLayoutOnSuccessCallback,
   MeasureOnSuccessCallback,
-  INativeMethods,
+  NativeMethods,
   ViewConfig,
 } from './ReactNativeTypes';
-import type {Instance} from './ReactFiberConfigNative';
+import type {Instance} from './ReactNativeHostConfig';
 
 // Modules provided by RN:
 import {
@@ -30,7 +30,7 @@ import {
   warnForStyleProps,
 } from './NativeMethodsMixinUtils';
 
-class ReactNativeFiberHostComponent implements INativeMethods {
+class ReactNativeFiberHostComponent {
   _children: Array<Instance | number>;
   _nativeTag: number;
   _internalFiberInstanceHandleDEV: Object;
@@ -82,8 +82,7 @@ class ReactNativeFiberHostComponent implements INativeMethods {
       // Already a node handle
       relativeNode = relativeToNativeNode;
     } else {
-      const nativeNode: ReactNativeFiberHostComponent =
-        (relativeToNativeNode: any);
+      const nativeNode: ReactNativeFiberHostComponent = (relativeToNativeNode: any);
       if (nativeNode._nativeTag) {
         relativeNode = nativeNode._nativeTag;
       }
@@ -92,7 +91,7 @@ class ReactNativeFiberHostComponent implements INativeMethods {
     if (relativeNode == null) {
       if (__DEV__) {
         console.error(
-          'ref.measureLayout must be called with a node handle or a ref to a native component.',
+          'Warning: ref.measureLayout must be called with a node handle or a ref to a native component.',
         );
       }
 
@@ -126,5 +125,8 @@ class ReactNativeFiberHostComponent implements INativeMethods {
     }
   }
 }
+
+// eslint-disable-next-line no-unused-expressions
+(ReactNativeFiberHostComponent.prototype: $ReadOnly<{...NativeMethods, ...}>);
 
 export default ReactNativeFiberHostComponent;

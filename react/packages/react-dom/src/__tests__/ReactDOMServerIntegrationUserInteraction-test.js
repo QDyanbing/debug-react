@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -12,25 +12,32 @@
 const ReactDOMServerIntegrationUtils = require('./utils/ReactDOMServerIntegrationTestUtils');
 
 let React;
-let ReactDOMClient;
+let ReactDOM;
 let ReactDOMServer;
+let ReactTestUtils;
 
 function initModules() {
   // Reset warning cache.
-  jest.resetModules();
+  jest.resetModuleRegistry();
   React = require('react');
-  ReactDOMClient = require('react-dom/client');
+  ReactDOM = require('react-dom');
   ReactDOMServer = require('react-dom/server');
+  ReactTestUtils = require('react-dom/test-utils');
 
   // Make them available to the helpers.
   return {
-    ReactDOMClient,
+    ReactDOM,
     ReactDOMServer,
+    ReactTestUtils,
   };
 }
 
-const {resetModules, itClientRenders, renderIntoDom, serverRender} =
-  ReactDOMServerIntegrationUtils(initModules);
+const {
+  resetModules,
+  itClientRenders,
+  renderIntoDom,
+  serverRender,
+} = ReactDOMServerIntegrationUtils(initModules);
 
 describe('ReactDOMServerIntegrationUserInteraction', () => {
   let ControlledInput, ControlledTextArea, ControlledCheckbox, ControlledSelect;
@@ -131,7 +138,7 @@ describe('ReactDOMServerIntegrationUserInteraction', () => {
     };
   });
 
-  describe('user interaction with controlled inputs', function () {
+  describe('user interaction with controlled inputs', function() {
     itClientRenders('a controlled text input', async render => {
       const setUntrackedValue = Object.getOwnPropertyDescriptor(
         HTMLInputElement.prototype,
@@ -241,7 +248,7 @@ describe('ReactDOMServerIntegrationUserInteraction', () => {
     });
   });
 
-  describe('user interaction with inputs before client render', function () {
+  describe('user interaction with inputs before client render', function() {
     // renders the element and changes the value **before** the client
     // code has a chance to render; this simulates what happens when a
     // user starts to interact with a server-rendered form before
@@ -326,14 +333,12 @@ describe('ReactDOMServerIntegrationUserInteraction', () => {
 
     // skipping this test because React 15 does the wrong thing. it blows
     // away the user's typing in the textarea.
-    // eslint-disable-next-line jest/no-disabled-tests
-    it.skip('should not blow away user-entered text on successful reconnect to an uncontrolled textarea', () =>
+    xit('should not blow away user-entered text on successful reconnect to an uncontrolled textarea', () =>
       testUserInteractionBeforeClientRender(<textarea defaultValue="Hello" />));
 
     // skipping this test because React 15 does the wrong thing. it blows
     // away the user's typing in the textarea.
-    // eslint-disable-next-line jest/no-disabled-tests
-    it.skip('should not blow away user-entered text on successful reconnect to a controlled textarea', async () => {
+    xit('should not blow away user-entered text on successful reconnect to a controlled textarea', async () => {
       let changeCount = 0;
       await testUserInteractionBeforeClientRender(
         <ControlledTextArea onChange={() => changeCount++} />,

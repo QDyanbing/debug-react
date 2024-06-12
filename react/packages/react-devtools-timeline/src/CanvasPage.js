@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,8 +7,13 @@
  * @flow
  */
 
-import type {Interaction, Point} from './view-base';
-import type {ReactEventInfo, TimelineData, ViewState} from './types';
+import type {Point} from './view-base';
+import type {
+  ReactHoverContextInfo,
+  TimelineData,
+  ReactMeasure,
+  ViewState,
+} from './types';
 
 import * as React from 'react';
 import {
@@ -21,6 +26,8 @@ import {
   useCallback,
 } from 'react';
 import AutoSizer from 'react-virtualized-auto-sizer';
+import {copy} from 'clipboard-js';
+import prettyMilliseconds from 'pretty-ms';
 
 import {
   HorizontalPanAndZoomView,
@@ -49,21 +56,24 @@ import {
 import {COLORS} from './content-views/constants';
 import {clampState, moveStateToRange} from './view-base/utils/scrollState';
 import EventTooltip from './EventTooltip';
+import {RegistryContext} from 'react-devtools-shared/src/devtools/ContextMenu/Contexts';
+import ContextMenu from 'react-devtools-shared/src/devtools/ContextMenu/ContextMenu';
+import ContextMenuItem from 'react-devtools-shared/src/devtools/ContextMenu/ContextMenuItem';
+import useContextMenu from 'react-devtools-shared/src/devtools/ContextMenu/useContextMenu';
+import {getBatchRange} from './utils/getBatchRange';
 import {MAX_ZOOM_LEVEL, MIN_ZOOM_LEVEL} from './view-base/constants';
 import {TimelineSearchContext} from './TimelineSearchContext';
-import {TimelineContext} from './TimelineContext';
-import CanvasPageContextMenu from './CanvasPageContextMenu';
-
-import type {ContextMenuRef} from 'react-devtools-shared/src/devtools/ContextMenu/types';
 
 import styles from './CanvasPage.css';
 
-type Props = {
+const CONTEXT_MENU_ID = 'canvas';
+
+type Props = {|
   profilerData: TimelineData,
   viewState: ViewState,
-};
+|};
 
-function CanvasPage({profilerData, viewState}: Props): React.Node {
+function CanvasPage({profilerData, viewState}: Props) {
   return (
     <div
       className={styles.CanvasPage}
@@ -82,7 +92,46 @@ function CanvasPage({profilerData, viewState}: Props): React.Node {
   );
 }
 
-const EMPTY_CONTEXT_INFO: ReactEventInfo = {
+const copySummary = (data: TimelineData, measure: ReactMeasure) => {
+  const {batchUID, duration, timestamp, type} = measure;
+
+  const [startTime, stopTime] = getBatchRange(batchUID, data);
+
+  copy(
+    JSON.stringify({
+      type,
+      timestamp: prettyMilliseconds(timestamp),
+      duration: prettyMilliseconds(duration),
+      batchDuration: prettyMilliseconds(stopTime - startTime),
+    }),
+  );
+};
+
+const zoomToBatch = (
+  data: TimelineData,
+  measure: ReactMeasure,
+  viewState: ViewState,
+  width: number,
+) => {
+  const {batchUID} = measure;
+  const [rangeStart, rangeEnd] = getBatchRange(batchUID, data);
+
+  // Convert from time range to ScrollState
+  const scrollState = moveStateToRange({
+    state: viewState.horizontalScrollState,
+    rangeStart,
+    rangeEnd,
+    contentLength: data.duration,
+
+    minContentLength: data.duration * MIN_ZOOM_LEVEL,
+    maxContentLength: data.duration * MAX_ZOOM_LEVEL,
+    containerLength: width,
+  });
+
+  viewState.updateHorizontalScrollState(scrollState);
+};
+
+const EMPTY_CONTEXT_INFO: ReactHoverContextInfo = {
   componentMeasure: null,
   flamechartStackFrame: null,
   measure: null,
@@ -95,12 +144,12 @@ const EMPTY_CONTEXT_INFO: ReactEventInfo = {
   userTimingMark: null,
 };
 
-type AutoSizedCanvasProps = {
+type AutoSizedCanvasProps = {|
   data: TimelineData,
   height: number,
   viewState: ViewState,
   width: number,
-};
+|};
 
 function AutoSizedCanvas({
   data,
@@ -110,51 +159,16 @@ function AutoSizedCanvas({
 }: AutoSizedCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
+  const [isContextMenuShown, setIsContextMenuShown] = useState<boolean>(false);
   const [mouseLocation, setMouseLocation] = useState<Point>(zeroPoint); // DOM coordinates
-  const [hoveredEvent, setHoveredEvent] = useState<ReactEventInfo | null>(null);
-  const [lastHoveredEvent, setLastHoveredEvent] =
-    useState<ReactEventInfo | null>(null);
-
-  const contextMenuRef: ContextMenuRef = useRef(null);
+  const [
+    hoveredEvent,
+    setHoveredEvent,
+  ] = useState<ReactHoverContextInfo | null>(null);
 
   const resetHoveredEvent = useCallback(
     () => setHoveredEvent(EMPTY_CONTEXT_INFO),
     [],
-  );
-  const updateHoveredEvent = useCallback(
-    (event: ReactEventInfo) => {
-      setHoveredEvent(event);
-
-      // If menu is already open, don't update the hovered event data
-      // So the same set of menu items is preserved until the current context menu is closed
-      if (contextMenuRef.current?.isShown()) {
-        return;
-      }
-
-      const {
-        componentMeasure,
-        flamechartStackFrame,
-        measure,
-        networkMeasure,
-        schedulingEvent,
-        suspenseEvent,
-      } = event;
-
-      // We have to keep track of last non-empty hovered event, since this will be the input for context menu items
-      // We can't just pass hoveredEvent to ContextMenuContainer,
-      // since it will be reset each time user moves mouse away from event object on the canvas
-      if (
-        componentMeasure != null ||
-        flamechartStackFrame != null ||
-        measure != null ||
-        networkMeasure != null ||
-        schedulingEvent != null ||
-        suspenseEvent != null
-      ) {
-        setLastHoveredEvent(event);
-      }
-    },
-    [contextMenuRef],
   );
 
   const {searchIndex, searchRegExp, searchResults} = useContext(
@@ -187,16 +201,18 @@ function AutoSizedCanvas({
   }, [searchIndex, searchRegExp, searchResults, viewState]);
 
   const surfaceRef = useRef(new Surface(resetHoveredEvent));
-  const userTimingMarksViewRef = useRef<null | UserTimingMarksView>(null);
-  const nativeEventsViewRef = useRef<null | NativeEventsView>(null);
-  const schedulingEventsViewRef = useRef<null | SchedulingEventsView>(null);
-  const suspenseEventsViewRef = useRef<null | SuspenseEventsView>(null);
-  const componentMeasuresViewRef = useRef<null | ComponentMeasuresView>(null);
-  const reactMeasuresViewRef = useRef<null | ReactMeasuresView>(null);
-  const flamechartViewRef = useRef<null | FlamechartView>(null);
-  const networkMeasuresViewRef = useRef<null | NetworkMeasuresView>(null);
-  const snapshotsViewRef = useRef<null | SnapshotsView>(null);
-  const thrownErrorsViewRef = useRef<null | ThrownErrorsView>(null);
+  const userTimingMarksViewRef = useRef(null);
+  const nativeEventsViewRef = useRef(null);
+  const schedulingEventsViewRef = useRef(null);
+  const suspenseEventsViewRef = useRef(null);
+  const componentMeasuresViewRef = useRef(null);
+  const reactMeasuresViewRef = useRef(null);
+  const flamechartViewRef = useRef(null);
+  const networkMeasuresViewRef = useRef(null);
+  const snapshotsViewRef = useRef(null);
+  const thrownErrorsViewRef = useRef(null);
+
+  const {hideMenu: hideContextMenu} = useContext(RegistryContext);
 
   useLayoutEffect(() => {
     const surface = surfaceRef.current;
@@ -204,7 +220,7 @@ function AutoSizedCanvas({
 
     // Auto hide context menu when panning.
     viewState.onHorizontalScrollStateChange(scrollState => {
-      contextMenuRef.current?.hide();
+      hideContextMenu();
     });
 
     // Initialize horizontal view state
@@ -470,7 +486,7 @@ function AutoSizedCanvas({
     }
   }, [width, height]);
 
-  const interactor = useCallback((interaction: Interaction) => {
+  const interactor = useCallback(interaction => {
     const canvas = canvasRef.current;
     if (canvas === null) {
       return;
@@ -502,14 +518,22 @@ function AutoSizedCanvas({
 
   useCanvasInteraction(canvasRef, interactor);
 
-  const {selectEvent} = useContext(TimelineContext);
+  useContextMenu({
+    data: {
+      data,
+      hoveredEvent,
+    },
+    id: CONTEXT_MENU_ID,
+    onChange: setIsContextMenuShown,
+    ref: canvasRef,
+  });
 
   useEffect(() => {
     const {current: userTimingMarksView} = userTimingMarksViewRef;
     if (userTimingMarksView) {
       userTimingMarksView.onHover = userTimingMark => {
         if (!hoveredEvent || hoveredEvent.userTimingMark !== userTimingMark) {
-          updateHoveredEvent({
+          setHoveredEvent({
             ...EMPTY_CONTEXT_INFO,
             userTimingMark,
           });
@@ -521,7 +545,7 @@ function AutoSizedCanvas({
     if (nativeEventsView) {
       nativeEventsView.onHover = nativeEvent => {
         if (!hoveredEvent || hoveredEvent.nativeEvent !== nativeEvent) {
-          updateHoveredEvent({
+          setHoveredEvent({
             ...EMPTY_CONTEXT_INFO,
             nativeEvent,
           });
@@ -533,17 +557,11 @@ function AutoSizedCanvas({
     if (schedulingEventsView) {
       schedulingEventsView.onHover = schedulingEvent => {
         if (!hoveredEvent || hoveredEvent.schedulingEvent !== schedulingEvent) {
-          updateHoveredEvent({
+          setHoveredEvent({
             ...EMPTY_CONTEXT_INFO,
             schedulingEvent,
           });
         }
-      };
-      schedulingEventsView.onClick = schedulingEvent => {
-        selectEvent({
-          ...EMPTY_CONTEXT_INFO,
-          schedulingEvent,
-        });
       };
     }
 
@@ -551,7 +569,7 @@ function AutoSizedCanvas({
     if (suspenseEventsView) {
       suspenseEventsView.onHover = suspenseEvent => {
         if (!hoveredEvent || hoveredEvent.suspenseEvent !== suspenseEvent) {
-          updateHoveredEvent({
+          setHoveredEvent({
             ...EMPTY_CONTEXT_INFO,
             suspenseEvent,
           });
@@ -563,7 +581,7 @@ function AutoSizedCanvas({
     if (reactMeasuresView) {
       reactMeasuresView.onHover = measure => {
         if (!hoveredEvent || hoveredEvent.measure !== measure) {
-          updateHoveredEvent({
+          setHoveredEvent({
             ...EMPTY_CONTEXT_INFO,
             measure,
           });
@@ -578,7 +596,7 @@ function AutoSizedCanvas({
           !hoveredEvent ||
           hoveredEvent.componentMeasure !== componentMeasure
         ) {
-          updateHoveredEvent({
+          setHoveredEvent({
             ...EMPTY_CONTEXT_INFO,
             componentMeasure,
           });
@@ -590,7 +608,7 @@ function AutoSizedCanvas({
     if (snapshotsView) {
       snapshotsView.onHover = snapshot => {
         if (!hoveredEvent || hoveredEvent.snapshot !== snapshot) {
-          updateHoveredEvent({
+          setHoveredEvent({
             ...EMPTY_CONTEXT_INFO,
             snapshot,
           });
@@ -605,7 +623,7 @@ function AutoSizedCanvas({
           !hoveredEvent ||
           hoveredEvent.flamechartStackFrame !== flamechartStackFrame
         ) {
-          updateHoveredEvent({
+          setHoveredEvent({
             ...EMPTY_CONTEXT_INFO,
             flamechartStackFrame,
           });
@@ -617,7 +635,7 @@ function AutoSizedCanvas({
     if (networkMeasuresView) {
       networkMeasuresView.onHover = networkMeasure => {
         if (!hoveredEvent || hoveredEvent.networkMeasure !== networkMeasure) {
-          updateHoveredEvent({
+          setHoveredEvent({
             ...EMPTY_CONTEXT_INFO,
             networkMeasure,
           });
@@ -629,7 +647,7 @@ function AutoSizedCanvas({
     if (thrownErrorsView) {
       thrownErrorsView.onHover = thrownError => {
         if (!hoveredEvent || hoveredEvent.thrownError !== thrownError) {
-          updateHoveredEvent({
+          setHoveredEvent({
             ...EMPTY_CONTEXT_INFO,
             thrownError,
           });
@@ -700,27 +718,99 @@ function AutoSizedCanvas({
   return (
     <Fragment>
       <canvas ref={canvasRef} height={height} width={width} />
-
-      <CanvasPageContextMenu
-        canvasRef={canvasRef}
-        hoveredEvent={lastHoveredEvent}
-        timelineData={data}
-        viewState={viewState}
-        canvasWidth={width}
-        closedMenuStub={
-          !surfaceRef.current.hasActiveView() ? (
-            <EventTooltip
-              canvasRef={canvasRef}
-              data={data}
-              height={height}
-              hoveredEvent={hoveredEvent}
-              origin={mouseLocation}
-              width={width}
-            />
-          ) : null
-        }
-        ref={contextMenuRef}
-      />
+      <ContextMenu id={CONTEXT_MENU_ID}>
+        {contextData => {
+          if (contextData.hoveredEvent == null) {
+            return null;
+          }
+          const {
+            componentMeasure,
+            flamechartStackFrame,
+            measure,
+            networkMeasure,
+            schedulingEvent,
+            suspenseEvent,
+          } = contextData.hoveredEvent;
+          return (
+            <Fragment>
+              {componentMeasure !== null && (
+                <ContextMenuItem
+                  onClick={() => copy(componentMeasure.componentName)}
+                  title="Copy component name">
+                  Copy component name
+                </ContextMenuItem>
+              )}
+              {networkMeasure !== null && (
+                <ContextMenuItem
+                  onClick={() => copy(networkMeasure.url)}
+                  title="Copy URL">
+                  Copy URL
+                </ContextMenuItem>
+              )}
+              {schedulingEvent !== null && (
+                <ContextMenuItem
+                  onClick={() => copy(schedulingEvent.componentName)}
+                  title="Copy component name">
+                  Copy component name
+                </ContextMenuItem>
+              )}
+              {suspenseEvent !== null && (
+                <ContextMenuItem
+                  onClick={() => copy(suspenseEvent.componentName)}
+                  title="Copy component name">
+                  Copy component name
+                </ContextMenuItem>
+              )}
+              {measure !== null && (
+                <ContextMenuItem
+                  onClick={() =>
+                    zoomToBatch(contextData.data, measure, viewState, width)
+                  }
+                  title="Zoom to batch">
+                  Zoom to batch
+                </ContextMenuItem>
+              )}
+              {measure !== null && (
+                <ContextMenuItem
+                  onClick={() => copySummary(contextData.data, measure)}
+                  title="Copy summary">
+                  Copy summary
+                </ContextMenuItem>
+              )}
+              {flamechartStackFrame !== null && (
+                <ContextMenuItem
+                  onClick={() => copy(flamechartStackFrame.scriptUrl)}
+                  title="Copy file path">
+                  Copy file path
+                </ContextMenuItem>
+              )}
+              {flamechartStackFrame !== null && (
+                <ContextMenuItem
+                  onClick={() =>
+                    copy(
+                      `line ${flamechartStackFrame.locationLine ??
+                        ''}, column ${flamechartStackFrame.locationColumn ??
+                        ''}`,
+                    )
+                  }
+                  title="Copy location">
+                  Copy location
+                </ContextMenuItem>
+              )}
+            </Fragment>
+          );
+        }}
+      </ContextMenu>
+      {!isContextMenuShown && !surfaceRef.current.hasActiveView() && (
+        <EventTooltip
+          canvasRef={canvasRef}
+          data={data}
+          height={height}
+          hoveredEvent={hoveredEvent}
+          origin={mouseLocation}
+          width={width}
+        />
+      )}
     </Fragment>
   );
 }

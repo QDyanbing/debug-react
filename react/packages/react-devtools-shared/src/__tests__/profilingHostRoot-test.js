@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,15 +7,12 @@
  * @flow
  */
 
-import {
-  getLegacyRenderImplementation,
-  getModernRenderImplementation,
-} from './utils';
-
 describe('profiling HostRoot', () => {
   let React;
+  let ReactDOMClient;
   let Scheduler;
-  let store;
+  let legacyRender;
+  let store: Store;
   let utils;
   let getEffectDurations;
   let effectDurations;
@@ -25,11 +22,14 @@ describe('profiling HostRoot', () => {
     utils = require('./utils');
     utils.beforeEachProfiling();
 
+    legacyRender = utils.legacyRender;
+
     getEffectDurations = require('../backend/utils').getEffectDurations;
 
     store = global.store;
 
     React = require('react');
+    ReactDOMClient = require('react-dom/client');
     Scheduler = require('scheduler');
 
     effectDurations = [];
@@ -49,11 +49,7 @@ describe('profiling HostRoot', () => {
     };
   });
 
-  const {render: legacyRender} = getLegacyRenderImplementation();
-  const {render: modernRender} = getModernRenderImplementation();
-
-  // @reactVersion >= 18.0
-  // @reactVersion <= 18.2
+  // @reactVersion >=18.0
   it('should expose passive and layout effect durations for render()', () => {
     function App() {
       React.useEffect(() => {
@@ -67,7 +63,8 @@ describe('profiling HostRoot', () => {
 
     utils.act(() => store.profilerStore.startProfiling());
     utils.act(() => {
-      legacyRender(<App />);
+      const container = document.createElement('div');
+      legacyRender(<App />, container);
     });
     utils.act(() => store.profilerStore.stopProfiling());
 
@@ -95,7 +92,9 @@ describe('profiling HostRoot', () => {
 
     utils.act(() => store.profilerStore.startProfiling());
     utils.act(() => {
-      modernRender(<App />);
+      const container = document.createElement('div');
+      const root = ReactDOMClient.createRoot(container);
+      root.render(<App />);
     });
     utils.act(() => store.profilerStore.stopProfiling());
 
@@ -127,9 +126,12 @@ describe('profiling HostRoot', () => {
       return null;
     }
 
+    const container = document.createElement('div');
+    const root = ReactDOMClient.createRoot(container);
+
     utils.act(() => store.profilerStore.startProfiling());
-    utils.act(() => modernRender(<App />));
-    utils.act(() => modernRender(<App shouldCascade={true} />));
+    utils.act(() => root.render(<App />));
+    utils.act(() => root.render(<App shouldCascade={true} />));
     utils.act(() => store.profilerStore.stopProfiling());
 
     expect(effectDurations).toHaveLength(3);

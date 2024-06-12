@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -13,21 +13,19 @@
 'use strict';
 
 let React;
-let ReactDOMClient;
-let act;
+let ReactTestUtils;
 
 describe('ReactChildReconciler', () => {
   beforeEach(() => {
     jest.resetModules();
 
     React = require('react');
-    ReactDOMClient = require('react-dom/client');
-    act = require('internal-test-utils').act;
+    ReactTestUtils = require('react-dom/test-utils');
   });
 
   function createIterable(array) {
     return {
-      '@@iterator': function () {
+      '@@iterator': function() {
         let i = 0;
         return {
           next() {
@@ -57,39 +55,29 @@ describe('ReactChildReconciler', () => {
     return fn;
   }
 
-  it('does not treat functions as iterables', async () => {
+  it('does not treat functions as iterables', () => {
+    let node;
     const iterableFunction = makeIterableFunction('foo');
 
-    const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    await expect(async () => {
-      await act(() => {
-        root.render(
-          <div>
-            <h1>{iterableFunction}</h1>
-          </div>,
-        );
-      });
+    expect(() => {
+      node = ReactTestUtils.renderIntoDocument(
+        <div>
+          <h1>{iterableFunction}</h1>
+        </div>,
+      );
     }).toErrorDev('Functions are not valid as a React child');
-    const node = container.firstChild;
 
     expect(node.innerHTML).toContain(''); // h1
   });
 
-  it('warns for duplicated array keys', async () => {
+  it('warns for duplicated array keys', () => {
     class Component extends React.Component {
       render() {
         return <div>{[<div key="1" />, <div key="1" />]}</div>;
       }
     }
 
-    const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    await expect(async () => {
-      await act(() => {
-        root.render(<Component />);
-      });
-    }).toErrorDev(
+    expect(() => ReactTestUtils.renderIntoDocument(<Component />)).toErrorDev(
       'Keys should be unique so that components maintain their identity ' +
         'across updates. Non-unique keys may cause children to be ' +
         'duplicated and/or omitted — the behavior is unsupported and ' +
@@ -97,7 +85,7 @@ describe('ReactChildReconciler', () => {
     );
   });
 
-  it('warns for duplicated array keys with component stack info', async () => {
+  it('warns for duplicated array keys with component stack info', () => {
     class Component extends React.Component {
       render() {
         return <div>{[<div key="1" />, <div key="1" />]}</div>;
@@ -116,42 +104,27 @@ describe('ReactChildReconciler', () => {
       }
     }
 
-    const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    await expect(async () => {
-      await act(() => {
-        root.render(<GrandParent />);
-      });
-    }).toErrorDev(
+    expect(() => ReactTestUtils.renderIntoDocument(<GrandParent />)).toErrorDev(
       'Encountered two children with the same key, `1`. ' +
         'Keys should be unique so that components maintain their identity ' +
         'across updates. Non-unique keys may cause children to be ' +
         'duplicated and/or omitted — the behavior is unsupported and ' +
         'could change in a future version.\n' +
         '    in div (at **)\n' +
-        (gate(flags => flags.enableOwnerStacks) ? '' : '    in div (at **)\n') +
         '    in Component (at **)\n' +
-        (gate(flags => flags.enableOwnerStacks)
-          ? ''
-          : '    in Parent (at **)\n') +
+        '    in Parent (at **)\n' +
         '    in GrandParent (at **)',
     );
   });
 
-  it('warns for duplicated iterable keys', async () => {
+  it('warns for duplicated iterable keys', () => {
     class Component extends React.Component {
       render() {
         return <div>{createIterable([<div key="1" />, <div key="1" />])}</div>;
       }
     }
 
-    const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    await expect(async () => {
-      await act(() => {
-        root.render(<Component />);
-      });
-    }).toErrorDev(
+    expect(() => ReactTestUtils.renderIntoDocument(<Component />)).toErrorDev(
       'Keys should be unique so that components maintain their identity ' +
         'across updates. Non-unique keys may cause children to be ' +
         'duplicated and/or omitted — the behavior is unsupported and ' +
@@ -159,7 +132,7 @@ describe('ReactChildReconciler', () => {
     );
   });
 
-  it('warns for duplicated iterable keys with component stack info', async () => {
+  it('warns for duplicated iterable keys with component stack info', () => {
     class Component extends React.Component {
       render() {
         return <div>{createIterable([<div key="1" />, <div key="1" />])}</div>;
@@ -178,24 +151,15 @@ describe('ReactChildReconciler', () => {
       }
     }
 
-    const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    await expect(async () => {
-      await act(() => {
-        root.render(<GrandParent />);
-      });
-    }).toErrorDev(
+    expect(() => ReactTestUtils.renderIntoDocument(<GrandParent />)).toErrorDev(
       'Encountered two children with the same key, `1`. ' +
         'Keys should be unique so that components maintain their identity ' +
         'across updates. Non-unique keys may cause children to be ' +
         'duplicated and/or omitted — the behavior is unsupported and ' +
         'could change in a future version.\n' +
         '    in div (at **)\n' +
-        (gate(flags => flags.enableOwnerStacks) ? '' : '    in div (at **)\n') +
         '    in Component (at **)\n' +
-        (gate(flags => flags.enableOwnerStacks)
-          ? ''
-          : '    in Parent (at **)\n') +
+        '    in Parent (at **)\n' +
         '    in GrandParent (at **)',
     );
   });

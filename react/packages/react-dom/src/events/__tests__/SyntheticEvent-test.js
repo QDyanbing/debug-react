@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -10,20 +10,16 @@
 'use strict';
 
 let React;
-let ReactDOMClient;
-let act;
+let ReactDOM;
 
 describe('SyntheticEvent', () => {
   let container;
-  let root;
 
   beforeEach(() => {
     React = require('react');
-    ReactDOMClient = require('react-dom/client');
-    act = require('internal-test-utils').act;
+    ReactDOM = require('react-dom');
 
     container = document.createElement('div');
-    root = ReactDOMClient.createRoot(container);
     document.body.appendChild(container);
   });
 
@@ -32,7 +28,7 @@ describe('SyntheticEvent', () => {
     container = null;
   });
 
-  it('should be able to `preventDefault`', async () => {
+  it('should be able to `preventDefault`', () => {
     let expectedCount = 0;
 
     const eventHandler = syntheticEvent => {
@@ -43,11 +39,7 @@ describe('SyntheticEvent', () => {
 
       expectedCount++;
     };
-    const nodeRef = React.createRef();
-    await act(async () => {
-      root.render(<div onClick={eventHandler} ref={nodeRef} />);
-    });
-    const node = nodeRef.current;
+    const node = ReactDOM.render(<div onClick={eventHandler} />, container);
 
     const event = document.createEvent('Event');
     event.initEvent('click', true, true);
@@ -56,7 +48,7 @@ describe('SyntheticEvent', () => {
     expect(expectedCount).toBe(1);
   });
 
-  it('should be prevented if nativeEvent is prevented', async () => {
+  it('should be prevented if nativeEvent is prevented', () => {
     let expectedCount = 0;
 
     const eventHandler = syntheticEvent => {
@@ -64,11 +56,7 @@ describe('SyntheticEvent', () => {
 
       expectedCount++;
     };
-    const nodeRef = React.createRef();
-    await act(async () => {
-      root.render(<div onClick={eventHandler} ref={nodeRef} />);
-    });
-    const node = nodeRef.current;
+    const node = ReactDOM.render(<div onClick={eventHandler} />, container);
 
     let event;
     event = document.createEvent('Event');
@@ -92,7 +80,7 @@ describe('SyntheticEvent', () => {
     expect(expectedCount).toBe(2);
   });
 
-  it('should be able to `stopPropagation`', async () => {
+  it('should be able to `stopPropagation`', () => {
     let expectedCount = 0;
 
     const eventHandler = syntheticEvent => {
@@ -102,11 +90,7 @@ describe('SyntheticEvent', () => {
 
       expectedCount++;
     };
-    const nodeRef = React.createRef();
-    await act(async () => {
-      root.render(<div onClick={eventHandler} ref={nodeRef} />);
-    });
-    const node = nodeRef.current;
+    const node = ReactDOM.render(<div onClick={eventHandler} />, container);
 
     const event = document.createEvent('Event');
     event.initEvent('click', true, true);

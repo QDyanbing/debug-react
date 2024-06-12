@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -11,150 +11,85 @@
 
 describe('ReactDOM unknown attribute', () => {
   let React;
-  let ReactDOMClient;
-  let act;
+  let ReactDOM;
 
   beforeEach(() => {
     jest.resetModules();
     React = require('react');
-    ReactDOMClient = require('react-dom/client');
-    act = require('internal-test-utils').act;
+    ReactDOM = require('react-dom');
   });
 
-  async function testUnknownAttributeRemoval(givenValue) {
+  function testUnknownAttributeRemoval(givenValue) {
     const el = document.createElement('div');
-    const root = ReactDOMClient.createRoot(el);
-
-    await act(() => {
-      root.render(<div unknown="something" />);
-    });
-
+    ReactDOM.render(<div unknown="something" />, el);
     expect(el.firstChild.getAttribute('unknown')).toBe('something');
-
-    await act(() => {
-      root.render(<div unknown={givenValue} />);
-    });
-
+    ReactDOM.render(<div unknown={givenValue} />, el);
     expect(el.firstChild.hasAttribute('unknown')).toBe(false);
   }
 
-  async function testUnknownAttributeAssignment(givenValue, expectedDOMValue) {
+  function testUnknownAttributeAssignment(givenValue, expectedDOMValue) {
     const el = document.createElement('div');
-    const root = ReactDOMClient.createRoot(el);
-
-    await act(() => {
-      root.render(<div unknown="something" />);
-    });
-
+    ReactDOM.render(<div unknown="something" />, el);
     expect(el.firstChild.getAttribute('unknown')).toBe('something');
-
-    await act(() => {
-      root.render(<div unknown={givenValue} />);
-    });
-
+    ReactDOM.render(<div unknown={givenValue} />, el);
     expect(el.firstChild.getAttribute('unknown')).toBe(expectedDOMValue);
   }
 
   describe('unknown attributes', () => {
-    it('removes values null and undefined', async () => {
-      await testUnknownAttributeRemoval(null);
-      await testUnknownAttributeRemoval(undefined);
+    it('removes values null and undefined', () => {
+      testUnknownAttributeRemoval(null);
+      testUnknownAttributeRemoval(undefined);
     });
 
-    it('changes values true, false to null, and also warns once', async () => {
-      await expect(() => testUnknownAttributeAssignment(true, null)).toErrorDev(
+    it('changes values true, false to null, and also warns once', () => {
+      expect(() => testUnknownAttributeAssignment(true, null)).toErrorDev(
         'Received `true` for a non-boolean attribute `unknown`.\n\n' +
           'If you want to write it to the DOM, pass a string instead: ' +
           'unknown="true" or unknown={value.toString()}.\n' +
           '    in div (at **)',
       );
-      await testUnknownAttributeAssignment(false, null);
+      testUnknownAttributeAssignment(false, null);
     });
 
-    it('removes unknown attributes that were rendered but are now missing', async () => {
+    it('removes unknown attributes that were rendered but are now missing', () => {
       const el = document.createElement('div');
-      const root = ReactDOMClient.createRoot(el);
-
-      await act(() => {
-        root.render(<div unknown="something" />);
-      });
-
+      ReactDOM.render(<div unknown="something" />, el);
       expect(el.firstChild.getAttribute('unknown')).toBe('something');
-
-      await act(() => {
-        root.render(<div />);
-      });
-
+      ReactDOM.render(<div />, el);
       expect(el.firstChild.hasAttribute('unknown')).toBe(false);
     });
 
-    it('removes new boolean props', async () => {
-      const el = document.createElement('div');
-      const root = ReactDOMClient.createRoot(el);
-
-      await expect(async () => {
-        await act(() => {
-          root.render(<div inert={true} />);
-        });
-      }).toErrorDev([]);
-
-      expect(el.firstChild.getAttribute('inert')).toBe(true ? '' : null);
+    it('passes through strings', () => {
+      testUnknownAttributeAssignment('a string', 'a string');
     });
 
-    it('warns once for empty strings in new boolean props', async () => {
-      const el = document.createElement('div');
-      const root = ReactDOMClient.createRoot(el);
-
-      await expect(async () => {
-        await act(() => {
-          root.render(<div inert="" />);
-        });
-      }).toErrorDev([
-        'Received an empty string for a boolean attribute `inert`. ' +
-          'This will treat the attribute as if it were false. ' +
-          'Either pass `false` to silence this warning, or ' +
-          'pass `true` if you used an empty string in earlier versions of React to indicate this attribute is true.',
-      ]);
-
-      expect(el.firstChild.getAttribute('inert')).toBe(true ? null : '');
-
-      // The warning is only printed once.
-      await act(() => {
-        root.render(<div inert="" />);
-      });
+    it('coerces numbers to strings', () => {
+      testUnknownAttributeAssignment(0, '0');
+      testUnknownAttributeAssignment(-1, '-1');
+      testUnknownAttributeAssignment(42, '42');
+      testUnknownAttributeAssignment(9000.99, '9000.99');
     });
 
-    it('passes through strings', async () => {
-      await testUnknownAttributeAssignment('a string', 'a string');
-    });
-
-    it('coerces numbers to strings', async () => {
-      await testUnknownAttributeAssignment(0, '0');
-      await testUnknownAttributeAssignment(-1, '-1');
-      await testUnknownAttributeAssignment(42, '42');
-      await testUnknownAttributeAssignment(9000.99, '9000.99');
-    });
-
-    it('coerces NaN to strings and warns', async () => {
-      await expect(() => testUnknownAttributeAssignment(NaN, 'NaN')).toErrorDev(
-        'Received NaN for the `unknown` attribute. ' +
+    it('coerces NaN to strings and warns', () => {
+      expect(() => testUnknownAttributeAssignment(NaN, 'NaN')).toErrorDev(
+        'Warning: Received NaN for the `unknown` attribute. ' +
           'If this is expected, cast the value to a string.\n' +
           '    in div (at **)',
       );
     });
 
-    it('coerces objects to strings and warns', async () => {
+    it('coerces objects to strings and warns', () => {
       const lol = {
         toString() {
           return 'lol';
         },
       };
 
-      await testUnknownAttributeAssignment({hello: 'world'}, '[object Object]');
-      await testUnknownAttributeAssignment(lol, 'lol');
+      testUnknownAttributeAssignment({hello: 'world'}, '[object Object]');
+      testUnknownAttributeAssignment(lol, 'lol');
     });
 
-    it('throws with Temporal-like objects', async () => {
+    it('throws with Temporal-like objects', () => {
       class TemporalLike {
         valueOf() {
           // Throwing here is the behavior of ECMAScript "Temporal" date/time API.
@@ -167,45 +102,41 @@ describe('ReactDOM unknown attribute', () => {
       }
       const test = () =>
         testUnknownAttributeAssignment(new TemporalLike(), null);
-      await expect(() =>
-        expect(test).rejects.toThrowError(new TypeError('prod message')),
+      expect(() =>
+        expect(test).toThrowError(new TypeError('prod message')),
       ).toErrorDev(
-        'The provided `unknown` attribute is an unsupported type TemporalLike.' +
-          ' This value must be coerced to a string before using it here.',
+        'Warning: The provided `unknown` attribute is an unsupported type TemporalLike.' +
+          ' This value must be coerced to a string before before using it here.',
       );
     });
 
-    it('removes symbols and warns', async () => {
-      await expect(() => testUnknownAttributeRemoval(Symbol('foo'))).toErrorDev(
-        'Invalid value for prop `unknown` on <div> tag. Either remove it ' +
+    it('removes symbols and warns', () => {
+      expect(() => testUnknownAttributeRemoval(Symbol('foo'))).toErrorDev(
+        'Warning: Invalid value for prop `unknown` on <div> tag. Either remove it ' +
           'from the element, or pass a string or number value to keep it ' +
-          'in the DOM. For details, see https://react.dev/link/attribute-behavior \n' +
+          'in the DOM. For details, see https://reactjs.org/link/attribute-behavior \n' +
           '    in div (at **)',
       );
     });
 
-    it('removes functions and warns', async () => {
-      await expect(() =>
+    it('removes functions and warns', () => {
+      expect(() =>
         testUnknownAttributeRemoval(function someFunction() {}),
       ).toErrorDev(
-        'Invalid value for prop `unknown` on <div> tag. Either remove ' +
+        'Warning: Invalid value for prop `unknown` on <div> tag. Either remove ' +
           'it from the element, or pass a string or number value to ' +
           'keep it in the DOM. For details, see ' +
-          'https://react.dev/link/attribute-behavior \n' +
+          'https://reactjs.org/link/attribute-behavior \n' +
           '    in div (at **)',
       );
     });
 
-    it('allows camelCase unknown attributes and warns', async () => {
+    it('allows camelCase unknown attributes and warns', () => {
       const el = document.createElement('div');
 
-      await expect(async () => {
-        const root = ReactDOMClient.createRoot(el);
-
-        await act(() => {
-          root.render(<div helloWorld="something" />);
-        });
-      }).toErrorDev(
+      expect(() =>
+        ReactDOM.render(<div helloWorld="something" />, el),
+      ).toErrorDev(
         'React does not recognize the `helloWorld` prop on a DOM element. ' +
           'If you intentionally want it to appear in the DOM as a custom ' +
           'attribute, spell it as lowercase `helloworld` instead. ' +

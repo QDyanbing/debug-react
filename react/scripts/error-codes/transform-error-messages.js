@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -17,7 +17,7 @@ const errorMap = invertObject(
 
 const SEEN_SYMBOL = Symbol('transform-error-messages.seen');
 
-module.exports = function (babel) {
+module.exports = function(babel) {
   const t = babel.types;
 
   function ErrorCallExpression(path, file) {
@@ -48,11 +48,6 @@ module.exports = function (babel) {
       errorMsgNode,
       errorMsgExpressions
     );
-
-    if (errorMsgLiteral === 'react-stack-top-frame') {
-      // This is a special case for generating stack traces.
-      return;
-    }
 
     let prodErrorId = errorMap[errorMsgLiteral];
     if (prodErrorId === undefined) {
@@ -127,10 +122,7 @@ module.exports = function (babel) {
 
     // Outputs:
     // Error(formatProdErrorMessage(ERR_CODE, adj, noun));
-    const newErrorCall = t.callExpression(t.identifier('Error'), [
-      prodMessage,
-      ...node.arguments.slice(1),
-    ]);
+    const newErrorCall = t.callExpression(t.identifier('Error'), [prodMessage]);
     newErrorCall[SEEN_SYMBOL] = true;
     path.replaceWith(newErrorCall);
   }

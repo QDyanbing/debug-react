@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -9,29 +9,26 @@
 
 import type Store from 'react-devtools-shared/src/devtools/store';
 
-import {getVersionedRenderImplementation} from './utils';
-
 describe('ProfilerStore', () => {
   let React;
+  let ReactDOM;
+  let legacyRender;
   let store: Store;
   let utils;
 
   beforeEach(() => {
-    global.IS_REACT_ACT_ENVIRONMENT = true;
-
     utils = require('./utils');
     utils.beforeEachProfiling();
+
+    legacyRender = utils.legacyRender;
 
     store = global.store;
     store.collapseNodesByDefault = false;
     store.recordChangeDescriptions = true;
 
     React = require('react');
+    ReactDOM = require('react-dom');
   });
-
-  const {render, unmount} = getVersionedRenderImplementation();
-  const {render: renderOther, unmount: unmountOther} =
-    getVersionedRenderImplementation();
 
   // @reactVersion >= 16.9
   it('should not remove profiling data when roots are unmounted', async () => {
@@ -41,16 +38,19 @@ describe('ProfilerStore', () => {
         .map((_, index) => <Child key={index} duration={index} />);
     const Child = () => <div>Hi!</div>;
 
+    const containerA = document.createElement('div');
+    const containerB = document.createElement('div');
+
     utils.act(() => {
-      render(<Parent key="A" count={3} />);
-      renderOther(<Parent key="B" count={2} />);
+      legacyRender(<Parent key="A" count={3} />, containerA);
+      legacyRender(<Parent key="B" count={2} />, containerB);
     });
 
     utils.act(() => store.profilerStore.startProfiling());
 
     utils.act(() => {
-      render(<Parent key="A" count={4} />);
-      renderOther(<Parent key="B" count={1} />);
+      legacyRender(<Parent key="A" count={4} />, containerA);
+      legacyRender(<Parent key="B" count={1} />, containerB);
     });
 
     utils.act(() => store.profilerStore.stopProfiling());
@@ -58,10 +58,12 @@ describe('ProfilerStore', () => {
     const rootA = store.roots[0];
     const rootB = store.roots[1];
 
-    utils.act(() => unmountOther());
+    utils.act(() => ReactDOM.unmountComponentAtNode(containerB));
+
     expect(store.profilerStore.getDataForRoot(rootA)).not.toBeNull();
 
-    utils.act(() => unmount());
+    utils.act(() => ReactDOM.unmountComponentAtNode(containerA));
+
     expect(store.profilerStore.getDataForRoot(rootB)).not.toBeNull();
   });
 
@@ -71,7 +73,7 @@ describe('ProfilerStore', () => {
     const fauxProfilingData = {
       dataForRoots: new Map(),
     };
-    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    spyOn(console, 'warn');
     store.profilerStore.profilingData = fauxProfilingData;
     expect(store.profilerStore.profilingData).not.toBe(fauxProfilingData);
     expect(console.warn).toHaveBeenCalledTimes(1);
@@ -93,9 +95,14 @@ describe('ProfilerStore', () => {
       return <input ref={inputRef} value={name} onChange={handleChange} />;
     };
 
+    const container = document.createElement('div');
+
+    // This element has to be in the <body> for the event system to work.
+    document.body.appendChild(container);
+
     // It's important that this test uses legacy sync mode.
     // The root API does not trigger this particular failing case.
-    utils.act(() => render(<ControlledInput />));
+    legacyRender(<ControlledInput />, container);
 
     utils.act(() => store.profilerStore.startProfiling());
 
@@ -141,9 +148,14 @@ describe('ProfilerStore', () => {
       return <input ref={inputRef} onBlur={handleBlur} />;
     };
 
+    const container = document.createElement('div');
+
+    // This element has to be in the <body> for the event system to work.
+    document.body.appendChild(container);
+
     // It's important that this test uses legacy sync mode.
     // The root API does not trigger this particular failing case.
-    utils.act(() => render(<Example />));
+    legacyRender(<Example />, container);
 
     expect(commitCount).toBe(1);
     commitCount = 0;
@@ -152,10 +164,10 @@ describe('ProfilerStore', () => {
 
     // Focus and blur.
     const target = inputRef.current;
-    utils.act(() => target.focus());
-    utils.act(() => target.blur());
-    utils.act(() => target.focus());
-    utils.act(() => target.blur());
+    target.focus();
+    target.blur();
+    target.focus();
+    target.blur();
     expect(commitCount).toBe(1);
 
     utils.act(() => store.profilerStore.stopProfiling());
@@ -175,7 +187,7 @@ describe('ProfilerStore', () => {
       utils.act(() => {
         const {
           ElementTypeHostComponent,
-        } = require('react-devtools-shared/src/frontend/types');
+        } = require('react-devtools-shared/src/types');
         store.componentFilters = [
           utils.createElementTypeFilter(ElementTypeHostComponent),
         ];
@@ -184,7 +196,7 @@ describe('ProfilerStore', () => {
   });
 
   // @reactVersion >= 16.9
-  it('should not throw if state contains a property hasOwnProperty', () => {
+  it('should not throw if state contains a property hasOwnProperty ', () => {
     let setStateCallback;
     const ControlledInput = () => {
       const [state, setState] = React.useState({hasOwnProperty: true});
@@ -192,9 +204,14 @@ describe('ProfilerStore', () => {
       return state.hasOwnProperty;
     };
 
+    const container = document.createElement('div');
+
+    // This element has to be in the <body> for the event system to work.
+    document.body.appendChild(container);
+
     // It's important that this test uses legacy sync mode.
     // The root API does not trigger this particular failing case.
-    utils.act(() => render(<ControlledInput />));
+    legacyRender(<ControlledInput />, container);
 
     utils.act(() => store.profilerStore.startProfiling());
     utils.act(() =>
@@ -226,7 +243,9 @@ describe('ProfilerStore', () => {
       );
     };
 
-    utils.act(() => render(<App />));
+    const container = document.createElement('div');
+
+    utils.act(() => legacyRender(<App />, container));
     utils.act(() => store.profilerStore.startProfiling());
   });
 });

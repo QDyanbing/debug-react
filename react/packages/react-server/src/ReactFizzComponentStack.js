@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -39,20 +39,19 @@ export function getStackByComponentStackNode(
 ): string {
   try {
     let info = '';
-    let node: ComponentStackNode = componentStack;
+    let node = componentStack;
     do {
       switch (node.tag) {
         case 0:
-          info += describeBuiltInComponentFrame(node.type);
+          info += describeBuiltInComponentFrame(node.type, null, null);
           break;
         case 1:
-          info += describeFunctionComponentFrame(node.type);
+          info += describeFunctionComponentFrame(node.type, null, null);
           break;
         case 2:
-          info += describeClassComponentFrame(node.type);
+          info += describeClassComponentFrame(node.type, null, null);
           break;
       }
-      // $FlowFixMe[incompatible-type] we bail out when we get a null
       node = node.parent;
     } while (node);
     return info;

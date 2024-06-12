@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -10,21 +10,17 @@
 'use strict';
 
 const React = require('react');
-const ReactDOMClient = require('react-dom/client');
-
-const act = require('internal-test-utils').act;
+const ReactDOM = require('react-dom');
 
 describe('dangerouslySetInnerHTML', () => {
   describe('when the node has innerHTML property', () => {
-    it('sets innerHTML on it', async () => {
+    it('sets innerHTML on it', () => {
       const container = document.createElement('div');
-      const root = ReactDOMClient.createRoot(container);
-      await act(() => {
-        root.render(
-          <div dangerouslySetInnerHTML={{__html: '<h1>Hello</h1>'}} />,
-        );
-      });
-      expect(container.firstChild.innerHTML).toBe('<h1>Hello</h1>');
+      const node = ReactDOM.render(
+        <div dangerouslySetInnerHTML={{__html: '<h1>Hello</h1>'}} />,
+        container,
+      );
+      expect(node.innerHTML).toBe('<h1>Hello</h1>');
     });
   });
 
@@ -59,23 +55,21 @@ describe('dangerouslySetInnerHTML', () => {
       );
     });
 
-    // @gate !disableIEWorkarounds
-    it('sets innerHTML on it', async () => {
+    it('sets innerHTML on it', () => {
       const html = '<circle></circle>';
       const container = document.createElementNS(
         'http://www.w3.org/2000/svg',
         'svg',
       );
-      const root = ReactDOMClient.createRoot(container);
-      await act(() => {
-        root.render(<g dangerouslySetInnerHTML={{__html: html}} />);
-      });
+      ReactDOM.render(
+        <g dangerouslySetInnerHTML={{__html: html}} />,
+        container,
+      );
       const circle = container.firstChild.firstChild;
       expect(circle.tagName).toBe('circle');
     });
 
-    // @gate !disableIEWorkarounds
-    it('clears previous children', async () => {
+    it('clears previous children', () => {
       const firstHtml = '<rect></rect>';
       const secondHtml = '<circle></circle>';
 
@@ -83,15 +77,16 @@ describe('dangerouslySetInnerHTML', () => {
         'http://www.w3.org/2000/svg',
         'svg',
       );
-      const root = ReactDOMClient.createRoot(container);
-      await act(() => {
-        root.render(<g dangerouslySetInnerHTML={{__html: firstHtml}} />);
-      });
+      ReactDOM.render(
+        <g dangerouslySetInnerHTML={{__html: firstHtml}} />,
+        container,
+      );
       const rect = container.firstChild.firstChild;
       expect(rect.tagName).toBe('rect');
-      await act(() => {
-        root.render(<g dangerouslySetInnerHTML={{__html: secondHtml}} />);
-      });
+      ReactDOM.render(
+        <g dangerouslySetInnerHTML={{__html: secondHtml}} />,
+        container,
+      );
       const circle = container.firstChild.firstChild;
       expect(circle.tagName).toBe('circle');
     });

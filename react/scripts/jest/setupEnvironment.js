@@ -8,6 +8,7 @@ global.__DEV__ = NODE_ENV === 'development';
 global.__EXTENSION__ = false;
 global.__TEST__ = NODE_ENV === 'test';
 global.__PROFILE__ = NODE_ENV === 'development';
+global.__UMD__ = false;
 
 const RELEASE_CHANNEL = process.env.RELEASE_CHANNEL;
 
@@ -21,7 +22,17 @@ global.__EXPERIMENTAL__ =
 global.__VARIANT__ = !!process.env.VARIANT;
 
 if (typeof window !== 'undefined') {
-} else {
-  global.AbortController =
-    require('abortcontroller-polyfill/dist/cjs-ponyfill').AbortController;
+  global.requestIdleCallback = function(callback) {
+    return setTimeout(() => {
+      callback({
+        timeRemaining() {
+          return Infinity;
+        },
+      });
+    });
+  };
+
+  global.cancelIdleCallback = function(callbackID) {
+    clearTimeout(callbackID);
+  };
 }

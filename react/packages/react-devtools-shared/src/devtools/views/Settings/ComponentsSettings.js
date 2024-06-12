@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -16,10 +16,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import {
-  LOCAL_STORAGE_OPEN_IN_EDITOR_URL,
-  LOCAL_STORAGE_OPEN_IN_EDITOR_URL_PRESET,
-} from '../../../constants';
+import {LOCAL_STORAGE_OPEN_IN_EDITOR_URL} from '../../../constants';
 import {useLocalStorage, useSubscription} from '../hooks';
 import {StoreContext} from '../context';
 import Button from '../Button';
@@ -40,7 +37,7 @@ import {
   ElementTypeOtherOrUnknown,
   ElementTypeProfiler,
   ElementTypeSuspense,
-} from 'react-devtools-shared/src/frontend/types';
+} from 'react-devtools-shared/src/types';
 import {getDefaultOpenInEditorURL} from 'react-devtools-shared/src/utils';
 
 import styles from './SettingsShared.css';
@@ -52,11 +49,9 @@ import type {
   ElementType,
   ElementTypeComponentFilter,
   RegExpComponentFilter,
-} from 'react-devtools-shared/src/frontend/types';
+} from 'react-devtools-shared/src/types';
 
-const vscodeFilepath = 'vscode://file/{path}:{line}';
-
-export default function ComponentsSettings(_: {}): React.Node {
+export default function ComponentsSettings(_: {||}) {
   const store = useContext(StoreContext);
   const {parseHookNames, setParseHookNames} = useContext(SettingsContext);
 
@@ -75,22 +70,18 @@ export default function ComponentsSettings(_: {}): React.Node {
   );
 
   const updateCollapseNodesByDefault = useCallback(
-    ({currentTarget}: $FlowFixMe) => {
+    ({currentTarget}) => {
       store.collapseNodesByDefault = !currentTarget.checked;
     },
     [store],
   );
 
   const updateParseHookNames = useCallback(
-    ({currentTarget}: $FlowFixMe) => {
+    ({currentTarget}) => {
       setParseHookNames(currentTarget.checked);
     },
     [setParseHookNames],
   );
-
-  const [openInEditorURLPreset, setOpenInEditorURLPreset] = useLocalStorage<
-    'vscode' | 'custom',
-  >(LOCAL_STORAGE_OPEN_IN_EDITOR_URL_PRESET, 'custom');
 
   const [openInEditorURL, setOpenInEditorURL] = useLocalStorage<string>(
     LOCAL_STORAGE_OPEN_IN_EDITOR_URL,
@@ -218,10 +209,6 @@ export default function ComponentsSettings(_: {}): React.Node {
     });
   }, []);
 
-  const removeAllFilter = () => {
-    setComponentFilters([]);
-  };
-
   const toggleFilterIsEnabled = useCallback(
     (componentFilter: ComponentFilter, isEnabled: boolean) => {
       setComponentFilters(prevComponentFilters => {
@@ -293,32 +280,15 @@ export default function ComponentsSettings(_: {}): React.Node {
 
       <label className={styles.OpenInURLSetting}>
         Open in Editor URL:{' '}
-        <select
-          className={styles.Select}
-          value={openInEditorURLPreset}
-          onChange={({currentTarget}) => {
-            const selectedValue = currentTarget.value;
-            setOpenInEditorURLPreset(selectedValue);
-            if (selectedValue === 'vscode') {
-              setOpenInEditorURL(vscodeFilepath);
-            } else if (selectedValue === 'custom') {
-              setOpenInEditorURL('');
-            }
-          }}>
-          <option value="vscode">VS Code</option>
-          <option value="custom">Custom</option>
-        </select>
-        {openInEditorURLPreset === 'custom' && (
-          <input
-            className={styles.Input}
-            type="text"
-            placeholder={process.env.EDITOR_URL ? process.env.EDITOR_URL : ''}
-            value={openInEditorURL}
-            onChange={event => {
-              setOpenInEditorURL(event.target.value);
-            }}
-          />
-        )}
+        <input
+          className={styles.Input}
+          type="text"
+          placeholder={process.env.EDITOR_URL ?? 'vscode://file/{path}:{line}'}
+          value={openInEditorURL}
+          onChange={event => {
+            setOpenInEditorURL(event.target.value);
+          }}
+        />
       </label>
 
       <div className={styles.Header}>Hide components where...</div>
@@ -374,9 +344,7 @@ export default function ComponentsSettings(_: {}): React.Node {
                       ): any): ComponentFilterType),
                     )
                   }>
-                  {/* TODO: currently disabled, need find a new way of doing this
-                    <option value={ComponentFilterLocation}>location</option>
-                  */}
+                  <option value={ComponentFilterLocation}>location</option>
                   <option value={ComponentFilterDisplayName}>name</option>
                   <option value={ComponentFilterElementType}>type</option>
                   <option value={ComponentFilterHOC}>hoc</option>
@@ -405,7 +373,7 @@ export default function ComponentsSettings(_: {}): React.Node {
                     <option value={ElementTypeFunction}>function</option>
                     <option value={ElementTypeForwardRef}>forward ref</option>
                     <option value={ElementTypeHostComponent}>
-                      dom nodes (e.g. &lt;div&gt;)
+                      host (e.g. &lt;div&gt;)
                     </option>
                     <option value={ElementTypeMemo}>memo</option>
                     <option value={ElementTypeOtherOrUnknown}>other</option>
@@ -440,24 +408,19 @@ export default function ComponentsSettings(_: {}): React.Node {
           ))}
         </tbody>
       </table>
-      <Button onClick={addFilter} title="Add filter">
+
+      <Button onClick={addFilter}>
         <ButtonIcon className={styles.ButtonIcon} type="add" />
         Add filter
       </Button>
-      {componentFilters.length > 0 && (
-        <Button onClick={removeAllFilter} title="Delete all filters">
-          <ButtonIcon className={styles.ButtonIcon} type="delete" />
-          Delete all filters
-        </Button>
-      )}
     </div>
   );
 }
 
-type ToggleIconProps = {
+type ToggleIconProps = {|
   isEnabled: boolean,
   isValid: boolean,
-};
+|};
 function ToggleIcon({isEnabled, isValid}: ToggleIconProps) {
   let className;
   if (isValid) {

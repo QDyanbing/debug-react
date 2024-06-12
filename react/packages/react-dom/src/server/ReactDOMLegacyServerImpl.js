@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -19,10 +19,9 @@ import {
 } from 'react-server/src/ReactFizzServer';
 
 import {
-  createResumableState,
-  createRenderState,
+  createResponseState,
   createRootFormatContext,
-} from 'react-dom-bindings/src/server/ReactFizzConfigDOMLegacy';
+} from './ReactDOMServerLegacyFormatConfig';
 
 type ServerOptions = {
   identifierPrefix?: string,
@@ -42,14 +41,12 @@ function renderToStringImpl(
   let fatalError = null;
   let result = '';
   const destination = {
-    // $FlowFixMe[missing-local-annot]
     push(chunk) {
       if (chunk !== null) {
         result += chunk;
       }
       return true;
     },
-    // $FlowFixMe[missing-local-annot]
     destroy(error) {
       didFatal = true;
       fatalError = error;
@@ -60,20 +57,17 @@ function renderToStringImpl(
   function onShellReady() {
     readyToStream = true;
   }
-  const resumableState = createResumableState(
-    options ? options.identifierPrefix : undefined,
-    undefined,
-  );
   const request = createRequest(
     children,
-    resumableState,
-    createRenderState(resumableState, generateStaticMarkup),
+    createResponseState(
+      generateStaticMarkup,
+      options ? options.identifierPrefix : undefined,
+    ),
     createRootFormatContext(),
     Infinity,
     onError,
     undefined,
     onShellReady,
-    undefined,
     undefined,
     undefined,
   );
@@ -82,7 +76,7 @@ function renderToStringImpl(
   // That way we write only client-rendered boundaries from the start.
   abort(request, abortReason);
   startFlowing(request, destination);
-  if (didFatal && fatalError !== abortReason) {
+  if (didFatal) {
     throw fatalError;
   }
 

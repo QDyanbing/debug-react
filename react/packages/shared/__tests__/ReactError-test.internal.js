@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -9,8 +9,7 @@
 'use strict';
 
 let React;
-let ReactDOMClient;
-let act;
+let ReactDOM;
 
 describe('ReactError', () => {
   let globalErrorMock;
@@ -28,8 +27,7 @@ describe('ReactError', () => {
     }
     jest.resetModules();
     React = require('react');
-    ReactDOMClient = require('react-dom/client');
-    act = require('internal-test-utils').act;
+    ReactDOM = require('react-dom');
   });
 
   afterEach(() => {
@@ -41,35 +39,20 @@ describe('ReactError', () => {
   // @gate build === "production"
   // @gate !source
   it('should error with minified error code', () => {
-    expect(() => {
-      ReactDOMClient.createRoot(null);
-    }).toThrowError(
+    expect(() => ReactDOM.render('Hi', null)).toThrowError(
       'Minified React error #200; visit ' +
-        'https://react.dev/errors/200' +
+        'https://reactjs.org/docs/error-decoder.html?invariant=200' +
         ' for the full message or use the non-minified dev environment' +
         ' for full errors and additional helpful warnings.',
     );
   });
 
-  // @gate build === "production"
-  // @gate !source
-  it('should serialize arguments', async () => {
+  it('should serialize arguments', () => {
     function Oops() {
-      return {};
+      return;
     }
     Oops.displayName = '#wtf';
-
     const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    await expect(async () => {
-      await act(async () => {
-        root.render(<Oops />);
-      });
-    }).rejects.toThrow(
-      'Minified React error #152; visit ' +
-        'https://reactjs.org/docs/error-decoder.html?invariant=152&args[]=%23wtf' +
-        ' for the full message or use the non-minified dev environment' +
-        ' for full errors and additional helpful warnings.',
-    );
+    expect(() => ReactDOM.render(<Oops />, container)).not.toThrowError();
   });
 });

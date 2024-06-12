@@ -1,12 +1,14 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
+ *
+ * @flow
  */
 'use strict';
 
-function evalStringConcat(ast) {
+function evalStringConcat(ast /* : Object */) /* : string */ {
   switch (ast.type) {
     case 'StringLiteral':
     case 'Literal': // ESLint
@@ -22,7 +24,10 @@ function evalStringConcat(ast) {
 }
 exports.evalStringConcat = evalStringConcat;
 
-function evalStringAndTemplateConcat(ast, args) {
+function evalStringAndTemplateConcat(
+  ast /* : Object */,
+  args /* : Array<mixed> */
+) /* : string */ {
   switch (ast.type) {
     case 'StringLiteral':
       return ast.value;

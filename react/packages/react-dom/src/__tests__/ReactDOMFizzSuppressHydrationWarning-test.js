@@ -1,11 +1,10 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
  * @emails react-core
- * @jest-environment ./scripts/jest/ReactDOMServerIntegrationEnvironment
  */
 
 'use strict';
@@ -22,16 +21,6 @@ let container;
 let buffer = '';
 let hasErrored = false;
 let fatalError = undefined;
-let waitForAll;
-
-function normalizeError(msg) {
-  // Take the first sentence to make it easier to assert on.
-  const idx = msg.indexOf('.');
-  if (idx > -1) {
-    return msg.slice(0, idx + 1);
-  }
-  return msg;
-}
 
 describe('ReactDOMFizzServerHydrationWarning', () => {
   beforeEach(() => {
@@ -40,11 +29,10 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
     Scheduler = require('scheduler');
     React = require('react');
     ReactDOMClient = require('react-dom/client');
-    ReactDOMFizzServer = require('react-dom/server');
+    if (__EXPERIMENTAL__) {
+      ReactDOMFizzServer = require('react-dom/server');
+    }
     Stream = require('stream');
-
-    const InternalTestUtils = require('internal-test-utils');
-    waitForAll = InternalTestUtils.waitForAll;
 
     // Test Environment
     const jsdom = new JSDOM(
@@ -139,7 +127,8 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
       : children;
   }
 
-  it('suppresses but does not fix text mismatches with suppressHydrationWarning', async () => {
+  // @gate experimental
+  it('suppresses and fixes text mismatches with suppressHydrationWarning', async () => {
     function App({isClient}) {
       return (
         <div>
@@ -150,7 +139,7 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
         </div>
       );
     }
-    await act(() => {
+    await act(async () => {
       const {pipe} = ReactDOMFizzServer.renderToPipeableStream(
         <App isClient={false} />,
       );
@@ -165,23 +154,21 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
     ReactDOMClient.hydrateRoot(container, <App isClient={true} />, {
       onRecoverableError(error) {
         // Don't miss a hydration error. There should be none.
-        Scheduler.log('onRecoverableError: ' + normalizeError(error.message));
-        if (error.cause) {
-          Scheduler.log('Cause: ' + normalizeError(error.cause.message));
-        }
+        Scheduler.unstable_yieldValue(error.message);
       },
     });
-    await waitForAll([]);
+    expect(Scheduler).toFlushAndYield([]);
     // The text mismatch should be *silently* fixed. Even in production.
     expect(getVisibleChildren(container)).toEqual(
       <div>
-        <span>Server Text</span>
-        <span>1</span>
+        <span>Client Text</span>
+        <span>2</span>
       </div>,
     );
   });
 
-  it('suppresses but does not fix multiple text node mismatches with suppressHydrationWarning', async () => {
+  // @gate experimental
+  it('suppresses and fixes multiple text node mismatches with suppressHydrationWarning', async () => {
     function App({isClient}) {
       return (
         <div>
@@ -192,7 +179,7 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
         </div>
       );
     }
-    await act(() => {
+    await act(async () => {
       const {pipe} = ReactDOMFizzServer.renderToPipeableStream(
         <App isClient={false} />,
       );
@@ -208,23 +195,21 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
     );
     ReactDOMClient.hydrateRoot(container, <App isClient={true} />, {
       onRecoverableError(error) {
-        Scheduler.log('onRecoverableError: ' + normalizeError(error.message));
-        if (error.cause) {
-          Scheduler.log('Cause: ' + normalizeError(error.cause.message));
-        }
+        Scheduler.unstable_yieldValue(error.message);
       },
     });
-    await waitForAll([]);
+    expect(Scheduler).toFlushAndYield([]);
     expect(getVisibleChildren(container)).toEqual(
       <div>
         <span>
-          {'Server1'}
-          {'Server2'}
+          {'Client1'}
+          {'Client2'}
         </span>
       </div>,
     );
   });
 
+  // @gate experimental
   it('errors on text-to-element mismatches with suppressHydrationWarning', async () => {
     function App({isClient}) {
       return (
@@ -235,7 +220,7 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
         </div>
       );
     }
-    await act(() => {
+    await act(async () => {
       const {pipe} = ReactDOMFizzServer.renderToPipeableStream(
         <App isClient={false} />,
       );
@@ -252,15 +237,21 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
     );
     ReactDOMClient.hydrateRoot(container, <App isClient={true} />, {
       onRecoverableError(error) {
-        Scheduler.log('onRecoverableError: ' + normalizeError(error.message));
-        if (error.cause) {
-          Scheduler.log('Cause: ' + normalizeError(error.cause.message));
-        }
+        Scheduler.unstable_yieldValue(error.message);
       },
     });
-    await waitForAll([
-      "onRecoverableError: Hydration failed because the server rendered HTML didn't match the client.",
-    ]);
+    expect(() => {
+      expect(Scheduler).toFlushAndYield([
+        'Hydration failed because the initial UI does not match what was rendered on the server.',
+        'There was an error while hydrating. Because the error happened outside of a Suspense boundary, the entire root will switch to client rendering.',
+      ]);
+    }).toErrorDev(
+      [
+        'Expected server HTML to contain a matching <span> in <span>',
+        'An error occurred during hydration. The server HTML was replaced with client content in <div>.',
+      ],
+      {withoutStack: 1},
+    );
     expect(getVisibleChildren(container)).toEqual(
       <div>
         <span>
@@ -270,17 +261,20 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
     );
   });
 
-  it('suppresses but does not fix client-only single text node mismatches with suppressHydrationWarning', async () => {
-    function App({text}) {
+  // @gate experimental
+  it('suppresses and fixes client-only single text node mismatches with suppressHydrationWarning', async () => {
+    function App({isClient}) {
       return (
         <div>
-          <span suppressHydrationWarning={true}>{text}</span>
+          <span suppressHydrationWarning={true}>
+            {isClient ? 'Client' : null}
+          </span>
         </div>
       );
     }
-    await act(() => {
+    await act(async () => {
       const {pipe} = ReactDOMFizzServer.renderToPipeableStream(
-        <App text={null} />,
+        <App isClient={false} />,
       );
       pipe(writable);
     });
@@ -289,32 +283,21 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
         <span />
       </div>,
     );
-    const root = ReactDOMClient.hydrateRoot(container, <App text="Client" />, {
+    ReactDOMClient.hydrateRoot(container, <App isClient={true} />, {
       onRecoverableError(error) {
-        Scheduler.log('onRecoverableError: ' + normalizeError(error.message));
-        if (error.cause) {
-          Scheduler.log('Cause: ' + normalizeError(error.cause.message));
-        }
+        Scheduler.unstable_yieldValue(error.message);
       },
     });
-    await waitForAll([]);
+    expect(Scheduler).toFlushAndYield([]);
     expect(getVisibleChildren(container)).toEqual(
       <div>
-        <span />
-      </div>,
-    );
-    // An update fixes it though.
-    root.render(<App text="Client 2" />);
-    await waitForAll([]);
-    expect(getVisibleChildren(container)).toEqual(
-      <div>
-        <span>Client 2</span>
+        <span>{'Client'}</span>
       </div>,
     );
   });
 
   // TODO: This behavior is not consistent with client-only single text node.
-
+  // @gate experimental
   it('errors on server-only single text node mismatches with suppressHydrationWarning', async () => {
     function App({isClient}) {
       return (
@@ -325,7 +308,7 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
         </div>
       );
     }
-    await act(() => {
+    await act(async () => {
       const {pipe} = ReactDOMFizzServer.renderToPipeableStream(
         <App isClient={false} />,
       );
@@ -338,15 +321,21 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
     );
     ReactDOMClient.hydrateRoot(container, <App isClient={true} />, {
       onRecoverableError(error) {
-        Scheduler.log('onRecoverableError: ' + normalizeError(error.message));
-        if (error.cause) {
-          Scheduler.log('Cause: ' + normalizeError(error.cause.message));
-        }
+        Scheduler.unstable_yieldValue(error.message);
       },
     });
-    await waitForAll([
-      "onRecoverableError: Hydration failed because the server rendered HTML didn't match the client.",
-    ]);
+    expect(() => {
+      expect(Scheduler).toFlushAndYield([
+        'Hydration failed because the initial UI does not match what was rendered on the server.',
+        'There was an error while hydrating. Because the error happened outside of a Suspense boundary, the entire root will switch to client rendering.',
+      ]);
+    }).toErrorDev(
+      [
+        'Did not expect server HTML to contain the text node "Server" in <span>',
+        'An error occurred during hydration. The server HTML was replaced with client content in <div>.',
+      ],
+      {withoutStack: 1},
+    );
     expect(getVisibleChildren(container)).toEqual(
       <div>
         <span />
@@ -354,6 +343,7 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
     );
   });
 
+  // @gate experimental
   it('errors on client-only extra text node mismatches with suppressHydrationWarning', async () => {
     function App({isClient}) {
       return (
@@ -365,7 +355,7 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
         </div>
       );
     }
-    await act(() => {
+    await act(async () => {
       const {pipe} = ReactDOMFizzServer.renderToPipeableStream(
         <App isClient={false} />,
       );
@@ -380,15 +370,21 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
     );
     ReactDOMClient.hydrateRoot(container, <App isClient={true} />, {
       onRecoverableError(error) {
-        Scheduler.log('onRecoverableError: ' + normalizeError(error.message));
-        if (error.cause) {
-          Scheduler.log('Cause: ' + normalizeError(error.cause.message));
-        }
+        Scheduler.unstable_yieldValue(error.message);
       },
     });
-    await waitForAll([
-      "onRecoverableError: Hydration failed because the server rendered HTML didn't match the client.",
-    ]);
+    expect(() => {
+      expect(Scheduler).toFlushAndYield([
+        'Hydration failed because the initial UI does not match what was rendered on the server.',
+        'There was an error while hydrating. Because the error happened outside of a Suspense boundary, the entire root will switch to client rendering.',
+      ]);
+    }).toErrorDev(
+      [
+        'Expected server HTML to contain a matching text node for "Client" in <span>.',
+        'An error occurred during hydration. The server HTML was replaced with client content in <div>.',
+      ],
+      {withoutStack: 1},
+    );
     expect(getVisibleChildren(container)).toEqual(
       <div>
         <span>
@@ -399,6 +395,7 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
     );
   });
 
+  // @gate experimental
   it('errors on server-only extra text node mismatches with suppressHydrationWarning', async () => {
     function App({isClient}) {
       return (
@@ -410,7 +407,7 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
         </div>
       );
     }
-    await act(() => {
+    await act(async () => {
       const {pipe} = ReactDOMFizzServer.renderToPipeableStream(
         <App isClient={false} />,
       );
@@ -425,15 +422,21 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
     );
     ReactDOMClient.hydrateRoot(container, <App isClient={true} />, {
       onRecoverableError(error) {
-        Scheduler.log('onRecoverableError: ' + normalizeError(error.message));
-        if (error.cause) {
-          Scheduler.log('Cause: ' + normalizeError(error.cause.message));
-        }
+        Scheduler.unstable_yieldValue(error.message);
       },
     });
-    await waitForAll([
-      "onRecoverableError: Hydration failed because the server rendered HTML didn't match the client.",
-    ]);
+    expect(() => {
+      expect(Scheduler).toFlushAndYield([
+        'Hydration failed because the initial UI does not match what was rendered on the server.',
+        'There was an error while hydrating. Because the error happened outside of a Suspense boundary, the entire root will switch to client rendering.',
+      ]);
+    }).toErrorDev(
+      [
+        'Did not expect server HTML to contain the text node "Server" in <span>.',
+        'An error occurred during hydration. The server HTML was replaced with client content in <div>.',
+      ],
+      {withoutStack: 1},
+    );
     expect(getVisibleChildren(container)).toEqual(
       <div>
         <span>
@@ -443,6 +446,7 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
     );
   });
 
+  // @gate experimental
   it('errors on element-to-text mismatches with suppressHydrationWarning', async () => {
     function App({isClient}) {
       return (
@@ -453,7 +457,7 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
         </div>
       );
     }
-    await act(() => {
+    await act(async () => {
       const {pipe} = ReactDOMFizzServer.renderToPipeableStream(
         <App isClient={false} />,
       );
@@ -468,15 +472,22 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
     );
     ReactDOMClient.hydrateRoot(container, <App isClient={true} />, {
       onRecoverableError(error) {
-        Scheduler.log('onRecoverableError: ' + normalizeError(error.message));
-        if (error.cause) {
-          Scheduler.log('Cause: ' + normalizeError(error.cause.message));
-        }
+        Scheduler.unstable_yieldValue(error.message);
       },
     });
-    await waitForAll([
-      "onRecoverableError: Hydration failed because the server rendered HTML didn't match the client.",
-    ]);
+    expect(() => {
+      expect(Scheduler).toFlushAndYield([
+        'Hydration failed because the initial UI does not match what was rendered on the server.',
+        'Hydration failed because the initial UI does not match what was rendered on the server.',
+        'There was an error while hydrating. Because the error happened outside of a Suspense boundary, the entire root will switch to client rendering.',
+      ]);
+    }).toErrorDev(
+      [
+        'Expected server HTML to contain a matching text node for "Client" in <span>.',
+        'An error occurred during hydration. The server HTML was replaced with client content in <div>.',
+      ],
+      {withoutStack: 1},
+    );
     expect(getVisibleChildren(container)).toEqual(
       <div>
         <span>
@@ -488,7 +499,8 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
     );
   });
 
-  it('suppresses but does not fix attribute mismatches with suppressHydrationWarning', async () => {
+  // @gate experimental
+  it('suppresses and does not fix attribute mismatches with suppressHydrationWarning', async () => {
     function App({isClient}) {
       return (
         <div>
@@ -502,7 +514,7 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
         </div>
       );
     }
-    await act(() => {
+    await act(async () => {
       const {pipe} = ReactDOMFizzServer.renderToPipeableStream(
         <App isClient={false} />,
       );
@@ -515,13 +527,10 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
     );
     ReactDOMClient.hydrateRoot(container, <App isClient={true} />, {
       onRecoverableError(error) {
-        Scheduler.log('onRecoverableError: ' + normalizeError(error.message));
-        if (error.cause) {
-          Scheduler.log('Cause: ' + normalizeError(error.cause.message));
-        }
+        Scheduler.unstable_yieldValue(error.message);
       },
     });
-    await waitForAll([]);
+    expect(Scheduler).toFlushAndYield([]);
     expect(getVisibleChildren(container)).toEqual(
       <div>
         <span class="server" style="opacity:0" data-serveronly="server-only" />
@@ -529,6 +538,7 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
     );
   });
 
+  // @gate experimental
   it('suppresses and does not fix html mismatches with suppressHydrationWarning', async () => {
     function App({isClient}) {
       return (
@@ -542,7 +552,7 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
         </div>
       );
     }
-    await act(() => {
+    await act(async () => {
       const {pipe} = ReactDOMFizzServer.renderToPipeableStream(
         <App isClient={false} />,
       );
@@ -555,13 +565,10 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
     );
     ReactDOMClient.hydrateRoot(container, <App isClient={true} />, {
       onRecoverableError(error) {
-        Scheduler.log('onRecoverableError: ' + normalizeError(error.message));
-        if (error.cause) {
-          Scheduler.log('Cause: ' + normalizeError(error.cause.message));
-        }
+        Scheduler.unstable_yieldValue(error.message);
       },
     });
-    await waitForAll([]);
+    expect(Scheduler).toFlushAndYield([]);
     expect(getVisibleChildren(container)).toEqual(
       <div>
         <p>Server HTML</p>
@@ -569,6 +576,7 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
     );
   });
 
+  // @gate experimental
   it('errors on insertions with suppressHydrationWarning', async () => {
     function App({isClient}) {
       return (
@@ -578,7 +586,7 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
         </div>
       );
     }
-    await act(() => {
+    await act(async () => {
       const {pipe} = ReactDOMFizzServer.renderToPipeableStream(
         <App isClient={false} />,
       );
@@ -591,15 +599,21 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
     );
     ReactDOMClient.hydrateRoot(container, <App isClient={true} />, {
       onRecoverableError(error) {
-        Scheduler.log('onRecoverableError: ' + normalizeError(error.message));
-        if (error.cause) {
-          Scheduler.log('Cause: ' + normalizeError(error.cause.message));
-        }
+        Scheduler.unstable_yieldValue(error.message);
       },
     });
-    await waitForAll([
-      "onRecoverableError: Hydration failed because the server rendered HTML didn't match the client.",
-    ]);
+    expect(() => {
+      expect(Scheduler).toFlushAndYield([
+        'Hydration failed because the initial UI does not match what was rendered on the server.',
+        'There was an error while hydrating. Because the error happened outside of a Suspense boundary, the entire root will switch to client rendering.',
+      ]);
+    }).toErrorDev(
+      [
+        'Expected server HTML to contain a matching <p> in <div>.',
+        'An error occurred during hydration. The server HTML was replaced with client content in <div>.',
+      ],
+      {withoutStack: 1},
+    );
     expect(getVisibleChildren(container)).toEqual(
       <div>
         <p>Client and server</p>
@@ -608,6 +622,7 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
     );
   });
 
+  // @gate experimental
   it('errors on deletions with suppressHydrationWarning', async () => {
     function App({isClient}) {
       return (
@@ -617,7 +632,7 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
         </div>
       );
     }
-    await act(() => {
+    await act(async () => {
       const {pipe} = ReactDOMFizzServer.renderToPipeableStream(
         <App isClient={false} />,
       );
@@ -631,15 +646,21 @@ describe('ReactDOMFizzServerHydrationWarning', () => {
     );
     ReactDOMClient.hydrateRoot(container, <App isClient={true} />, {
       onRecoverableError(error) {
-        Scheduler.log('onRecoverableError: ' + normalizeError(error.message));
-        if (error.cause) {
-          Scheduler.log('Cause: ' + normalizeError(error.cause.message));
-        }
+        Scheduler.unstable_yieldValue(error.message);
       },
     });
-    await waitForAll([
-      "onRecoverableError: Hydration failed because the server rendered HTML didn't match the client.",
-    ]);
+    expect(() => {
+      expect(Scheduler).toFlushAndYield([
+        'Hydration failed because the initial UI does not match what was rendered on the server.',
+        'There was an error while hydrating. Because the error happened outside of a Suspense boundary, the entire root will switch to client rendering.',
+      ]);
+    }).toErrorDev(
+      [
+        'Did not expect server HTML to contain a <p> in <div>.',
+        'An error occurred during hydration. The server HTML was replaced with client content in <div>.',
+      ],
+      {withoutStack: 1},
+    );
     expect(getVisibleChildren(container)).toEqual(
       <div>
         <p>Client and server</p>

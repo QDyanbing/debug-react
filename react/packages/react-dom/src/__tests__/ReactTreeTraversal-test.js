@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -10,9 +10,7 @@
 'use strict';
 
 let React;
-let ReactDOMClient;
-let act;
-let root;
+let ReactDOM;
 
 const ChildComponent = ({id, eventHandler}) => (
   <div
@@ -70,10 +68,9 @@ describe('ReactTreeTraversal', () => {
   let outerNode1;
   let outerNode2;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     React = require('react');
-    ReactDOMClient = require('react-dom/client');
-    act = require('internal-test-utils').act;
+    ReactDOM = require('react-dom');
 
     mockFn.mockReset();
 
@@ -84,10 +81,7 @@ describe('ReactTreeTraversal', () => {
     document.body.appendChild(outerNode1);
     document.body.appendChild(outerNode2);
 
-    root = ReactDOMClient.createRoot(container);
-    await act(() => {
-      root.render(<ParentComponent eventHandler={mockFn} />);
-    });
+    ReactDOM.render(<ParentComponent eventHandler={mockFn} />, container);
   });
 
   afterEach(() => {

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -11,41 +11,23 @@
 
 let React;
 let ReactDOM;
-let ReactDOMClient;
-let act;
-let Scheduler;
-let assertLog;
+
 let TestComponent;
-let testComponentInstance;
 
 describe('ReactCompositeComponent-state', () => {
   beforeEach(() => {
     React = require('react');
     ReactDOM = require('react-dom');
-    ReactDOMClient = require('react-dom/client');
-    act = require('internal-test-utils').act;
-    Scheduler = require('scheduler');
-
-    const InternalTestUtils = require('internal-test-utils');
-    assertLog = InternalTestUtils.assertLog;
-
-    function LogAfterCommit({children, color}) {
-      React.useEffect(() => {
-        Scheduler.log(`commit ${color}`);
-      });
-      return children;
-    }
 
     TestComponent = class extends React.Component {
       constructor(props) {
         super(props);
         this.peekAtState('getInitialState', undefined, props);
         this.state = {color: 'red'};
-        testComponentInstance = this;
       }
 
       peekAtState = (from, state = this.state, props = this.props) => {
-        Scheduler.log(`${from} ${state && state.color}`);
+        props.stateListener(from, state && state.color);
       };
 
       peekAtCallback = from => {
@@ -61,23 +43,19 @@ describe('ReactCompositeComponent-state', () => {
 
       render() {
         this.peekAtState('render');
-        return (
-          <LogAfterCommit color={this.state.color}>
-            <div>{this.state.color}</div>
-          </LogAfterCommit>
-        );
+        return <div>{this.state.color}</div>;
       }
 
       UNSAFE_componentWillMount() {
         this.peekAtState('componentWillMount-start');
-        this.setState(function (state) {
+        this.setState(function(state) {
           this.peekAtState('before-setState-sunrise', state);
         });
         this.setState(
           {color: 'sunrise'},
           this.peekAtCallback('setState-sunrise'),
         );
-        this.setState(function (state) {
+        this.setState(function(state) {
           this.peekAtState('after-setState-sunrise', state);
         });
         this.peekAtState('componentWillMount-after-sunrise');
@@ -85,7 +63,7 @@ describe('ReactCompositeComponent-state', () => {
           {color: 'orange'},
           this.peekAtCallback('setState-orange'),
         );
-        this.setState(function (state) {
+        this.setState(function(state) {
           this.peekAtState('after-setState-orange', state);
         });
         this.peekAtState('componentWillMount-end');
@@ -103,18 +81,18 @@ describe('ReactCompositeComponent-state', () => {
       UNSAFE_componentWillReceiveProps(newProps) {
         this.peekAtState('componentWillReceiveProps-start');
         if (newProps.nextColor) {
-          this.setState(function (state) {
+          this.setState(function(state) {
             this.peekAtState('before-setState-receiveProps', state);
             return {color: newProps.nextColor};
           });
           // No longer a public API, but we can test that it works internally by
           // reaching into the updater.
           this.updater.enqueueReplaceState(this, {color: undefined});
-          this.setState(function (state) {
+          this.setState(function(state) {
             this.peekAtState('before-setState-again-receiveProps', state);
             return {color: newProps.nextColor};
           }, this.peekAtCallback('setState-receiveProps'));
-          this.setState(function (state) {
+          this.setState(function(state) {
             this.peekAtState('after-setState-receiveProps', state);
           });
         }
@@ -143,116 +121,104 @@ describe('ReactCompositeComponent-state', () => {
     };
   });
 
-  it('should support setting state', async () => {
+  it('should support setting state', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
-    const root = ReactDOMClient.createRoot(container);
 
-    await act(() => {
-      root.render(<TestComponent />);
-    });
+    const stateListener = jest.fn();
+    const instance = ReactDOM.render(
+      <TestComponent stateListener={stateListener} />,
+      container,
+      function peekAtInitialCallback() {
+        this.peekAtState('initial-callback');
+      },
+    );
+    ReactDOM.render(
+      <TestComponent stateListener={stateListener} nextColor="green" />,
+      container,
+      instance.peekAtCallback('setProps'),
+    );
+    instance.setFavoriteColor('blue');
+    instance.forceUpdate(instance.peekAtCallback('forceUpdate'));
 
-    assertLog([
+    ReactDOM.unmountComponentAtNode(container);
+
+    const expected = [
       // there is no state when getInitialState() is called
-      'getInitialState undefined',
-      'componentWillMount-start red',
+      ['getInitialState', null],
+      ['componentWillMount-start', 'red'],
       // setState()'s only enqueue pending states.
-      'componentWillMount-after-sunrise red',
-      'componentWillMount-end red',
+      ['componentWillMount-after-sunrise', 'red'],
+      ['componentWillMount-end', 'red'],
       // pending state queue is processed
-      'before-setState-sunrise red',
-      'after-setState-sunrise sunrise',
-      'after-setState-orange orange',
+      ['before-setState-sunrise', 'red'],
+      ['after-setState-sunrise', 'sunrise'],
+      ['after-setState-orange', 'orange'],
       // pending state has been applied
-      'render orange',
-      'componentDidMount-start orange',
+      ['render', 'orange'],
+      ['componentDidMount-start', 'orange'],
       // setState-sunrise and setState-orange should be called here,
       // after the bug in #1740
       // componentDidMount() called setState({color:'yellow'}), which is async.
       // The update doesn't happen until the next flush.
-      'componentDidMount-end orange',
-      'setState-sunrise orange',
-      'setState-orange orange',
-      'commit orange',
-      'shouldComponentUpdate-currentState orange',
-      'shouldComponentUpdate-nextState yellow',
-      'componentWillUpdate-currentState orange',
-      'componentWillUpdate-nextState yellow',
-      'render yellow',
-      'componentDidUpdate-currentState yellow',
-      'componentDidUpdate-prevState orange',
-      'setState-yellow yellow',
-      'commit yellow',
-    ]);
-
-    await act(() => {
-      root.render(<TestComponent nextColor="green" />);
-    });
-
-    assertLog([
-      'componentWillReceiveProps-start yellow',
+      ['componentDidMount-end', 'orange'],
+      ['setState-sunrise', 'orange'],
+      ['setState-orange', 'orange'],
+      ['initial-callback', 'orange'],
+      ['shouldComponentUpdate-currentState', 'orange'],
+      ['shouldComponentUpdate-nextState', 'yellow'],
+      ['componentWillUpdate-currentState', 'orange'],
+      ['componentWillUpdate-nextState', 'yellow'],
+      ['render', 'yellow'],
+      ['componentDidUpdate-currentState', 'yellow'],
+      ['componentDidUpdate-prevState', 'orange'],
+      ['setState-yellow', 'yellow'],
+      ['componentWillReceiveProps-start', 'yellow'],
       // setState({color:'green'}) only enqueues a pending state.
-      'componentWillReceiveProps-end yellow',
+      ['componentWillReceiveProps-end', 'yellow'],
       // pending state queue is processed
       // We keep updates in the queue to support
       // replaceState(prevState => newState).
-      'before-setState-receiveProps yellow',
-      'before-setState-again-receiveProps undefined',
-      'after-setState-receiveProps green',
-      'shouldComponentUpdate-currentState yellow',
-      'shouldComponentUpdate-nextState green',
-      'componentWillUpdate-currentState yellow',
-      'componentWillUpdate-nextState green',
-      'render green',
-      'componentDidUpdate-currentState green',
-      'componentDidUpdate-prevState yellow',
-      'setState-receiveProps green',
-      'commit green',
-    ]);
-
-    await act(() => {
-      testComponentInstance.setFavoriteColor('blue');
-    });
-
-    assertLog([
+      ['before-setState-receiveProps', 'yellow'],
+      ['before-setState-again-receiveProps', undefined],
+      ['after-setState-receiveProps', 'green'],
+      ['shouldComponentUpdate-currentState', 'yellow'],
+      ['shouldComponentUpdate-nextState', 'green'],
+      ['componentWillUpdate-currentState', 'yellow'],
+      ['componentWillUpdate-nextState', 'green'],
+      ['render', 'green'],
+      ['componentDidUpdate-currentState', 'green'],
+      ['componentDidUpdate-prevState', 'yellow'],
+      ['setState-receiveProps', 'green'],
+      ['setProps', 'green'],
       // setFavoriteColor('blue')
-      'shouldComponentUpdate-currentState green',
-      'shouldComponentUpdate-nextState blue',
-      'componentWillUpdate-currentState green',
-      'componentWillUpdate-nextState blue',
-      'render blue',
-      'componentDidUpdate-currentState blue',
-      'componentDidUpdate-prevState green',
-      'setFavoriteColor blue',
-      'commit blue',
-    ]);
-    await act(() => {
-      testComponentInstance.forceUpdate(
-        testComponentInstance.peekAtCallback('forceUpdate'),
-      );
-    });
-    assertLog([
+      ['shouldComponentUpdate-currentState', 'green'],
+      ['shouldComponentUpdate-nextState', 'blue'],
+      ['componentWillUpdate-currentState', 'green'],
+      ['componentWillUpdate-nextState', 'blue'],
+      ['render', 'blue'],
+      ['componentDidUpdate-currentState', 'blue'],
+      ['componentDidUpdate-prevState', 'green'],
+      ['setFavoriteColor', 'blue'],
       // forceUpdate()
-      'componentWillUpdate-currentState blue',
-      'componentWillUpdate-nextState blue',
-      'render blue',
-      'componentDidUpdate-currentState blue',
-      'componentDidUpdate-prevState blue',
-      'forceUpdate blue',
-      'commit blue',
-    ]);
-
-    root.unmount();
-
-    assertLog([
-      // unmount()
+      ['componentWillUpdate-currentState', 'blue'],
+      ['componentWillUpdate-nextState', 'blue'],
+      ['render', 'blue'],
+      ['componentDidUpdate-currentState', 'blue'],
+      ['componentDidUpdate-prevState', 'blue'],
+      ['forceUpdate', 'blue'],
+      // unmountComponent()
       // state is available within `componentWillUnmount()`
-      'componentWillUnmount blue',
-    ]);
+      ['componentWillUnmount', 'blue'],
+    ];
+
+    expect(stateListener.mock.calls.join('\n')).toEqual(expected.join('\n'));
   });
 
-  it('should call componentDidUpdate of children first', async () => {
+  it('should call componentDidUpdate of children first', () => {
     const container = document.createElement('div');
+
+    let ops = [];
 
     let child = null;
     let parent = null;
@@ -263,7 +229,7 @@ describe('ReactCompositeComponent-state', () => {
         child = this;
       }
       componentDidUpdate() {
-        Scheduler.log('child did update');
+        ops.push('child did update');
       }
       render() {
         return <div />;
@@ -287,40 +253,36 @@ describe('ReactCompositeComponent-state', () => {
         parent = this;
       }
       componentDidUpdate() {
-        Scheduler.log('parent did update');
+        ops.push('parent did update');
       }
       render() {
         return <Intermediate />;
       }
     }
 
-    const root = ReactDOMClient.createRoot(container);
-    await act(() => {
-      root.render(<Parent />);
-    });
+    ReactDOM.render(<Parent />, container);
 
-    await act(() => {
+    ReactDOM.unstable_batchedUpdates(() => {
       parent.setState({foo: true});
       child.setState({bar: true});
     });
-
     // When we render changes top-down in a batch, children's componentDidUpdate
     // happens before the parent.
-    assertLog(['child did update', 'parent did update']);
+    expect(ops).toEqual(['child did update', 'parent did update']);
 
     shouldUpdate = false;
 
-    await act(() => {
+    ops = [];
+
+    ReactDOM.unstable_batchedUpdates(() => {
       parent.setState({foo: false});
       child.setState({bar: false});
     });
-
     // We expect the same thing to happen if we bail out in the middle.
-    assertLog(['child did update', 'parent did update']);
+    expect(ops).toEqual(['child did update', 'parent did update']);
   });
 
-  it('should batch unmounts', async () => {
-    let outer;
+  it('should batch unmounts', () => {
     class Inner extends React.Component {
       render() {
         return <div />;
@@ -335,9 +297,6 @@ describe('ReactCompositeComponent-state', () => {
 
     class Outer extends React.Component {
       state = {showInner: true};
-      componentDidMount() {
-        outer = this;
-      }
 
       render() {
         return <div>{this.state.showInner && <Inner />}</div>;
@@ -345,21 +304,18 @@ describe('ReactCompositeComponent-state', () => {
     }
 
     const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    await act(() => {
-      root.render(<Outer />);
-    });
-
+    const outer = ReactDOM.render(<Outer />, container);
     expect(() => {
-      root.unmount();
+      ReactDOM.unmountComponentAtNode(container);
     }).not.toThrow();
   });
 
-  it('should update state when called from child cWRP', async () => {
+  it('should update state when called from child cWRP', function() {
+    const log = [];
     class Parent extends React.Component {
       state = {value: 'one'};
       render() {
-        Scheduler.log('parent render ' + this.state.value);
+        log.push('parent render ' + this.state.value);
         return <Child parent={this} value={this.state.value} />;
       }
     }
@@ -369,30 +325,22 @@ describe('ReactCompositeComponent-state', () => {
         if (updated) {
           return;
         }
-        Scheduler.log('child componentWillReceiveProps ' + this.props.value);
+        log.push('child componentWillReceiveProps ' + this.props.value);
         this.props.parent.setState({value: 'two'});
-        Scheduler.log(
-          'child componentWillReceiveProps done ' + this.props.value,
-        );
+        log.push('child componentWillReceiveProps done ' + this.props.value);
         updated = true;
       }
       render() {
-        Scheduler.log('child render ' + this.props.value);
+        log.push('child render ' + this.props.value);
         return <div>{this.props.value}</div>;
       }
     }
     const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    await act(() => {
-      root.render(<Parent />);
-    });
-
-    assertLog(['parent render one', 'child render one']);
-    await act(() => {
-      root.render(<Parent />);
-    });
-
-    assertLog([
+    ReactDOM.render(<Parent />, container);
+    ReactDOM.render(<Parent />, container);
+    expect(log).toEqual([
+      'parent render one',
+      'child render one',
       'parent render one',
       'child componentWillReceiveProps one',
       'child componentWillReceiveProps done one',
@@ -402,19 +350,15 @@ describe('ReactCompositeComponent-state', () => {
     ]);
   });
 
-  it('should merge state when sCU returns false', async () => {
-    let test;
+  it('should merge state when sCU returns false', function() {
+    const log = [];
     class Test extends React.Component {
       state = {a: 0};
-      componentDidMount() {
-        test = this;
-      }
-
       render() {
         return null;
       }
       shouldComponentUpdate(nextProps, nextState) {
-        Scheduler.log(
+        log.push(
           'scu from ' +
             Object.keys(this.state) +
             ' to ' +
@@ -425,28 +369,22 @@ describe('ReactCompositeComponent-state', () => {
     }
 
     const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    await act(() => {
-      root.render(<Test />);
-    });
-    await act(() => {
-      test.setState({b: 0});
-    });
-
-    assertLog(['scu from a to a,b']);
-    await act(() => {
-      test.setState({c: 0});
-    });
-    assertLog(['scu from a,b to a,b,c']);
+    const test = ReactDOM.render(<Test />, container);
+    test.setState({b: 0});
+    expect(log.length).toBe(1);
+    test.setState({c: 0});
+    expect(log.length).toBe(2);
+    expect(log).toEqual(['scu from a to a,b', 'scu from a,b to a,b,c']);
   });
 
-  it('should treat assigning to this.state inside cWRP as a replaceState, with a warning', async () => {
+  it('should treat assigning to this.state inside cWRP as a replaceState, with a warning', () => {
+    const ops = [];
     class Test extends React.Component {
       state = {step: 1, extra: true};
       UNSAFE_componentWillReceiveProps() {
         this.setState({step: 2}, () => {
           // Tests that earlier setState callbacks are not dropped
-          Scheduler.log(
+          ops.push(
             `callback -- step: ${this.state.step}, extra: ${!!this.state
               .extra}`,
           );
@@ -455,7 +393,7 @@ describe('ReactCompositeComponent-state', () => {
         this.state = {step: 3};
       }
       render() {
-        Scheduler.log(
+        ops.push(
           `render -- step: ${this.state.step}, extra: ${!!this.state.extra}`,
         );
         return null;
@@ -464,42 +402,32 @@ describe('ReactCompositeComponent-state', () => {
 
     // Mount
     const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    await act(() => {
-      root.render(<Test />);
-    });
+    ReactDOM.render(<Test />, container);
     // Update
-    expect(() => {
-      ReactDOM.flushSync(() => {
-        root.render(<Test />);
-      });
-    }).toErrorDev(
-      'Test.componentWillReceiveProps(): Assigning directly to ' +
+    expect(() => ReactDOM.render(<Test />, container)).toErrorDev(
+      'Warning: Test.componentWillReceiveProps(): Assigning directly to ' +
         "this.state is deprecated (except inside a component's constructor). " +
         'Use setState instead.',
     );
 
-    assertLog([
+    expect(ops).toEqual([
       'render -- step: 1, extra: true',
       'render -- step: 3, extra: false',
       'callback -- step: 3, extra: false',
     ]);
 
     // Check deduplication; (no additional warnings are expected)
-    expect(() => {
-      ReactDOM.flushSync(() => {
-        root.render(<Test />);
-      });
-    }).not.toThrow();
+    ReactDOM.render(<Test />, container);
   });
 
   it('should treat assigning to this.state inside cWM as a replaceState, with a warning', () => {
+    const ops = [];
     class Test extends React.Component {
       state = {step: 1, extra: true};
       UNSAFE_componentWillMount() {
         this.setState({step: 2}, () => {
           // Tests that earlier setState callbacks are not dropped
-          Scheduler.log(
+          ops.push(
             `callback -- step: ${this.state.step}, extra: ${!!this.state
               .extra}`,
           );
@@ -508,7 +436,7 @@ describe('ReactCompositeComponent-state', () => {
         this.state = {step: 3};
       }
       render() {
-        Scheduler.log(
+        ops.push(
           `render -- step: ${this.state.step}, extra: ${!!this.state.extra}`,
         );
         return null;
@@ -517,66 +445,73 @@ describe('ReactCompositeComponent-state', () => {
 
     // Mount
     const container = document.createElement('div');
-    const root = ReactDOMClient.createRoot(container);
-    expect(() => {
-      ReactDOM.flushSync(() => {
-        root.render(<Test />);
-      });
-    }).toErrorDev(
-      'Test.componentWillMount(): Assigning directly to ' +
+    expect(() => ReactDOM.render(<Test />, container)).toErrorDev(
+      'Warning: Test.componentWillMount(): Assigning directly to ' +
         "this.state is deprecated (except inside a component's constructor). " +
         'Use setState instead.',
     );
 
-    assertLog([
-      'render -- step: 3, extra: false',
-      'callback -- step: 3, extra: false',
-
-      // A second time for the retry.
+    expect(ops).toEqual([
       'render -- step: 3, extra: false',
       'callback -- step: 3, extra: false',
     ]);
   });
 
-  it('should not support setState in componentWillUnmount', async () => {
-    let subscription;
-    class A extends React.Component {
-      componentWillUnmount() {
-        subscription();
+  if (!require('shared/ReactFeatureFlags').disableModulePatternComponents) {
+    it('should support stateful module pattern components', () => {
+      function Child() {
+        return {
+          state: {
+            count: 123,
+          },
+          render() {
+            return <div>{`count:${this.state.count}`}</div>;
+          },
+        };
       }
-      render() {
-        return 'A';
-      }
-    }
 
-    class B extends React.Component {
-      state = {siblingUnmounted: false};
-      UNSAFE_componentWillMount() {
-        subscription = () => this.setState({siblingUnmounted: true});
-      }
-      render() {
-        return 'B' + (this.state.siblingUnmounted ? ' No Sibling' : '');
-      }
-    }
+      const el = document.createElement('div');
+      expect(() => ReactDOM.render(<Child />, el)).toErrorDev(
+        'Warning: The <Child /> component appears to be a function component that returns a class instance. ' +
+          'Change Child to a class that extends React.Component instead. ' +
+          "If you can't use a class try assigning the prototype on the function as a workaround. " +
+          '`Child.prototype = React.Component.prototype`. ' +
+          "Don't use an arrow function since it cannot be called with `new` by React.",
+      );
 
-    const el = document.createElement('div');
-    const root = ReactDOMClient.createRoot(el);
-    await act(() => {
-      root.render(<A />);
+      expect(el.textContent).toBe('count:123');
     });
-    expect(el.textContent).toBe('A');
 
-    expect(() => {
-      ReactDOM.flushSync(() => {
-        root.render(<B />);
-      });
-    }).toErrorDev(
-      "Can't perform a React state update on a component that hasn't mounted yet",
-    );
-  });
+    it('should support getDerivedStateFromProps for module pattern components', () => {
+      function Child() {
+        return {
+          state: {
+            count: 1,
+          },
+          render() {
+            return <div>{`count:${this.state.count}`}</div>;
+          },
+        };
+      }
+      Child.getDerivedStateFromProps = (props, prevState) => {
+        return {
+          count: prevState.count + props.incrementBy,
+        };
+      };
 
-  // @gate !disableLegacyMode
-  it('Legacy mode should support setState in componentWillUnmount (#18851)', () => {
+      const el = document.createElement('div');
+      ReactDOM.render(<Child incrementBy={0} />, el);
+      expect(el.textContent).toBe('count:1');
+
+      ReactDOM.render(<Child incrementBy={2} />, el);
+      expect(el.textContent).toBe('count:3');
+
+      ReactDOM.render(<Child incrementBy={1} />, el);
+      expect(el.textContent).toBe('count:4');
+    });
+  }
+
+  it('should support setState in componentWillUnmount', () => {
     let subscription;
     class A extends React.Component {
       componentWillUnmount() {

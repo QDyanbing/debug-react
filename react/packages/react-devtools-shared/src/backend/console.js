@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -8,22 +8,13 @@
  */
 
 import type {Fiber} from 'react-reconciler/src/ReactInternalTypes';
-import type {
-  LegacyDispatcherRef,
-  CurrentDispatcherRef,
-  ReactRenderer,
-  WorkTagMap,
-  ConsolePatchSettings,
-} from './types';
+import type {CurrentDispatcherRef, ReactRenderer, WorkTagMap} from './types';
+import type {BrowserTheme} from 'react-devtools-shared/src/devtools/views/DevTools';
 import {format, formatWithStyles} from './utils';
 
-import {getInternalReactConstants, getDispatcherRef} from './renderer';
-import {
-  getStackByFiberInDevAndProd,
-  supportsNativeConsoleTasks,
-} from './DevToolsFiberComponentStack';
+import {getInternalReactConstants} from './renderer';
+import {getStackByFiberInDevAndProd} from './DevToolsFiberComponentStack';
 import {consoleManagedByDevToolsDuringStrictMode} from 'react-devtools-feature-flags';
-import {castBool, castBrowserTheme} from '../utils';
 
 const OVERRIDE_CONSOLE_METHODS = ['error', 'trace', 'warn'];
 const DIMMED_NODE_CONSOLE_COLOR = '\x1b[2m%s\x1b[0m';
@@ -78,16 +69,16 @@ type OnErrorOrWarning = (
 
 const injectedRenderers: Map<
   ReactRenderer,
-  {
-    currentDispatcherRef: LegacyDispatcherRef | CurrentDispatcherRef,
+  {|
+    currentDispatcherRef: CurrentDispatcherRef,
     getCurrentFiber: () => Fiber | null,
     onErrorOrWarning: ?OnErrorOrWarning,
     workTagMap: WorkTagMap,
-  },
+  |},
 > = new Map();
 
 let targetConsole: Object = console;
-let targetConsoleMethods: {[string]: $FlowFixMe} = {};
+let targetConsoleMethods = {};
 for (const method in console) {
   targetConsoleMethods[method] = console[method];
 }
@@ -105,7 +96,7 @@ export function dangerous_setTargetConsoleForTesting(
 ): void {
   targetConsole = targetConsoleForTesting;
 
-  targetConsoleMethods = ({}: {[string]: $FlowFixMe});
+  targetConsoleMethods = {};
   for (const method in targetConsole) {
     targetConsoleMethods[method] = console[method];
   }
@@ -144,7 +135,7 @@ export function registerRenderer(
   }
 }
 
-const consoleSettingsRef: ConsolePatchSettings = {
+const consoleSettingsRef = {
   appendComponentStack: false,
   breakOnConsoleErrors: false,
   showInlineWarningsAndErrors: false,
@@ -160,7 +151,13 @@ export function patch({
   showInlineWarningsAndErrors,
   hideConsoleLogsInStrictMode,
   browserTheme,
-}: ConsolePatchSettings): void {
+}: {
+  appendComponentStack: boolean,
+  breakOnConsoleErrors: boolean,
+  showInlineWarningsAndErrors: boolean,
+  hideConsoleLogsInStrictMode: boolean,
+  browserTheme: BrowserTheme,
+}): void {
   // Settings may change after we've patched the console.
   // Using a shared ref allows the patch function to read the latest values.
   consoleSettingsRef.appendComponentStack = appendComponentStack;
@@ -179,11 +176,12 @@ export function patch({
       return;
     }
 
-    const originalConsoleMethods: {[string]: $FlowFixMe} = {};
+    const originalConsoleMethods = {};
 
     unpatchFn = () => {
       for (const method in originalConsoleMethods) {
         try {
+          // $FlowFixMe property error|warn is not writable.
           targetConsole[method] = originalConsoleMethods[method];
         } catch (error) {}
       }
@@ -197,7 +195,6 @@ export function patch({
           ? targetConsole[method].__REACT_DEVTOOLS_ORIGINAL_METHOD__
           : targetConsole[method]);
 
-        // $FlowFixMe[missing-local-annot]
         const overrideMethod = (...args) => {
           let shouldAppendWarningStack = false;
           if (method !== 'log') {
@@ -219,9 +216,12 @@ export function patch({
           // Search for the first renderer that has a current Fiber.
           // We don't handle the edge case of stacks for more than one (e.g. interleaved renderers?)
           // eslint-disable-next-line no-for-of-loops/no-for-of-loops
-          for (const renderer of injectedRenderers.values()) {
-            const currentDispatcherRef = getDispatcherRef(renderer);
-            const {getCurrentFiber, onErrorOrWarning, workTagMap} = renderer;
+          for (const {
+            currentDispatcherRef,
+            getCurrentFiber,
+            onErrorOrWarning,
+            workTagMap,
+          } of injectedRenderers.values()) {
             const current: ?Fiber = getCurrentFiber();
             if (current != null) {
               try {
@@ -238,14 +238,11 @@ export function patch({
                   }
                 }
 
-                if (
-                  shouldAppendWarningStack &&
-                  !supportsNativeConsoleTasks(current)
-                ) {
+                if (shouldAppendWarningStack) {
                   const componentStack = getStackByFiberInDevAndProd(
                     workTagMap,
                     current,
-                    (currentDispatcherRef: any),
+                    currentDispatcherRef,
                   );
                   if (componentStack !== '') {
                     if (isStrictModeOverride(args, method)) {
@@ -282,6 +279,7 @@ export function patch({
         overrideMethod.__REACT_DEVTOOLS_ORIGINAL_METHOD__ = originalMethod;
         originalMethod.__REACT_DEVTOOLS_OVERRIDE_METHOD__ = overrideMethod;
 
+        // $FlowFixMe property error|warn is not writable.
         targetConsole[method] = overrideMethod;
       } catch (error) {}
     });
@@ -300,29 +298,22 @@ export function unpatch(): void {
 
 let unpatchForStrictModeFn: null | (() => void) = null;
 
-// NOTE: KEEP IN SYNC with src/hook.js:patchConsoleForInitialCommitInStrictMode
+// NOTE: KEEP IN SYNC with src/hook.js:patchConsoleForInitialRenderInStrictMode
 export function patchForStrictMode() {
   if (consoleManagedByDevToolsDuringStrictMode) {
-    const overrideConsoleMethods = [
-      'error',
-      'group',
-      'groupCollapsed',
-      'info',
-      'log',
-      'trace',
-      'warn',
-    ];
+    const overrideConsoleMethods = ['error', 'trace', 'warn', 'log'];
 
     if (unpatchForStrictModeFn !== null) {
       // Don't patch twice.
       return;
     }
 
-    const originalConsoleMethods: {[string]: $FlowFixMe} = {};
+    const originalConsoleMethods = {};
 
     unpatchForStrictModeFn = () => {
       for (const method in originalConsoleMethods) {
         try {
+          // $FlowFixMe property error|warn is not writable.
           targetConsole[method] = originalConsoleMethods[method];
         } catch (error) {}
       }
@@ -336,7 +327,6 @@ export function patchForStrictMode() {
           ? targetConsole[method].__REACT_DEVTOOLS_STRICT_MODE_ORIGINAL_METHOD__
           : targetConsole[method]);
 
-        // $FlowFixMe[missing-local-annot]
         const overrideMethod = (...args) => {
           if (!consoleSettingsRef.hideConsoleLogsInStrictMode) {
             // Dim the text color of the double logs if we're not
@@ -354,18 +344,17 @@ export function patchForStrictMode() {
           }
         };
 
-        overrideMethod.__REACT_DEVTOOLS_STRICT_MODE_ORIGINAL_METHOD__ =
-          originalMethod;
-        originalMethod.__REACT_DEVTOOLS_STRICT_MODE_OVERRIDE_METHOD__ =
-          overrideMethod;
+        overrideMethod.__REACT_DEVTOOLS_STRICT_MODE_ORIGINAL_METHOD__ = originalMethod;
+        originalMethod.__REACT_DEVTOOLS_STRICT_MODE_OVERRIDE_METHOD__ = overrideMethod;
 
+        // $FlowFixMe property error|warn is not writable.
         targetConsole[method] = overrideMethod;
       } catch (error) {}
     });
   }
 }
 
-// NOTE: KEEP IN SYNC with src/hook.js:unpatchConsoleForInitialCommitInStrictMode
+// NOTE: KEEP IN SYNC with src/hook.js:unpatchConsoleForInitialRenderInStrictMode
 export function unpatchForStrictMode(): void {
   if (consoleManagedByDevToolsDuringStrictMode) {
     if (unpatchForStrictModeFn !== null) {
@@ -373,50 +362,4 @@ export function unpatchForStrictMode(): void {
       unpatchForStrictModeFn = null;
     }
   }
-}
-
-export function patchConsoleUsingWindowValues() {
-  const appendComponentStack =
-    castBool(window.__REACT_DEVTOOLS_APPEND_COMPONENT_STACK__) ?? true;
-  const breakOnConsoleErrors =
-    castBool(window.__REACT_DEVTOOLS_BREAK_ON_CONSOLE_ERRORS__) ?? false;
-  const showInlineWarningsAndErrors =
-    castBool(window.__REACT_DEVTOOLS_SHOW_INLINE_WARNINGS_AND_ERRORS__) ?? true;
-  const hideConsoleLogsInStrictMode =
-    castBool(window.__REACT_DEVTOOLS_HIDE_CONSOLE_LOGS_IN_STRICT_MODE__) ??
-    false;
-  const browserTheme =
-    castBrowserTheme(window.__REACT_DEVTOOLS_BROWSER_THEME__) ?? 'dark';
-
-  patch({
-    appendComponentStack,
-    breakOnConsoleErrors,
-    showInlineWarningsAndErrors,
-    hideConsoleLogsInStrictMode,
-    browserTheme,
-  });
-}
-
-// After receiving cached console patch settings from React Native, we set them on window.
-// When the console is initially patched (in renderer.js and hook.js), these values are read.
-// The browser extension (etc.) sets these values on window, but through another method.
-export function writeConsolePatchSettingsToWindow(
-  settings: ConsolePatchSettings,
-): void {
-  window.__REACT_DEVTOOLS_APPEND_COMPONENT_STACK__ =
-    settings.appendComponentStack;
-  window.__REACT_DEVTOOLS_BREAK_ON_CONSOLE_ERRORS__ =
-    settings.breakOnConsoleErrors;
-  window.__REACT_DEVTOOLS_SHOW_INLINE_WARNINGS_AND_ERRORS__ =
-    settings.showInlineWarningsAndErrors;
-  window.__REACT_DEVTOOLS_HIDE_CONSOLE_LOGS_IN_STRICT_MODE__ =
-    settings.hideConsoleLogsInStrictMode;
-  window.__REACT_DEVTOOLS_BROWSER_THEME__ = settings.browserTheme;
-}
-
-export function installConsoleFunctionsToWindow(): void {
-  window.__REACT_DEVTOOLS_CONSOLE_FUNCTIONS__ = {
-    patchConsoleUsingWindowValues,
-    registerRendererWithConsole: registerRenderer,
-  };
 }

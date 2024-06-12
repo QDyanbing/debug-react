@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -10,23 +10,23 @@
 import {
   ElementTypeForwardRef,
   ElementTypeMemo,
-} from 'react-devtools-shared/src/frontend/types';
+} from 'react-devtools-shared/src/types';
 import {formatDuration} from './utils';
 import ProfilerStore from 'react-devtools-shared/src/devtools/ProfilerStore';
 
 import type {CommitTree} from './types';
 
-export type ChartNode = {
+export type ChartNode = {|
   id: number,
   label: string,
   name: string,
   value: number,
-};
+|};
 
-export type ChartData = {
+export type ChartData = {|
   maxValue: number,
   nodes: Array<ChartNode>,
-};
+|};
 
 const cachedChartData: Map<string, ChartData> = new Map();
 
@@ -35,12 +35,12 @@ export function getChartData({
   commitTree,
   profilerStore,
   rootID,
-}: {
+}: {|
   commitIndex: number,
   commitTree: CommitTree,
   profilerStore: ProfilerStore,
   rootID: number,
-}): ChartData {
+|}): ChartData {
   const commitDatum = profilerStore.getCommitData(rootID, commitIndex);
 
   const {fiberActualDurations, fiberSelfDurations} = commitDatum;
@@ -61,7 +61,7 @@ export function getChartData({
       throw Error(`Could not find node with id "${id}" in commit tree`);
     }
 
-    const {displayName, key, parentID, type, compiledWithForget} = node;
+    const {displayName, key, parentID, type} = node;
 
     // Don't show the root node in this chart.
     if (parentID === 0) {
@@ -72,7 +72,6 @@ export function getChartData({
 
     const name = displayName || 'Anonymous';
     const maybeKey = key !== null ? ` key="${key}"` : '';
-    const maybeForgetBadge = compiledWithForget ? '✨ ' : '';
 
     let maybeBadge = '';
     if (type === ElementTypeForwardRef) {
@@ -81,7 +80,7 @@ export function getChartData({
       maybeBadge = ' (Memo)';
     }
 
-    const label = `${maybeForgetBadge}${name}${maybeBadge}${maybeKey} (${formatDuration(
+    const label = `${name}${maybeBadge}${maybeKey} (${formatDuration(
       selfDuration,
     )}ms)`;
     chartNodes.push({

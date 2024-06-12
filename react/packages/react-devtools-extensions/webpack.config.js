@@ -1,8 +1,7 @@
 'use strict';
 
 const {resolve} = require('path');
-const Webpack = require('webpack');
-const TerserPlugin = require('terser-webpack-plugin');
+const {DefinePlugin} = require('webpack');
 const {
   DARK_MODE_DIMMED_WARNING_COLOR,
   DARK_MODE_DIMMED_ERROR_COLOR,
@@ -14,7 +13,6 @@ const {
   getVersionString,
 } = require('./utils');
 const {resolveFeatureFlags} = require('react-devtools-shared/buildUtils');
-const SourceMapIgnoreListPlugin = require('react-devtools-shared/SourceMapIgnoreListPlugin');
 
 const NODE_ENV = process.env.NODE_ENV;
 if (!NODE_ENV) {
@@ -37,11 +35,6 @@ const DEVTOOLS_VERSION = getVersionString(process.env.DEVTOOLS_VERSION);
 const EDITOR_URL = process.env.EDITOR_URL || null;
 const LOGGING_URL = process.env.LOGGING_URL || null;
 
-const IS_CHROME = process.env.IS_CHROME === 'true';
-const IS_FIREFOX = process.env.IS_FIREFOX === 'true';
-const IS_EDGE = process.env.IS_EDGE === 'true';
-const IS_INTERNAL_VERSION = process.env.FEATURE_FLAG_TARGET === 'extension-fb';
-
 const featureFlagTarget = process.env.FEATURE_FLAG_TARGET || 'extension-oss';
 
 const babelOptions = {
@@ -55,17 +48,14 @@ const babelOptions = {
 
 module.exports = {
   mode: __DEV__ ? 'development' : 'production',
-  devtool: false,
+  devtool: __DEV__ ? 'cheap-module-eval-source-map' : false,
   entry: {
-    background: './src/background/index.js',
-    backendManager: './src/contentScripts/backendManager.js',
-    fileFetcher: './src/contentScripts/fileFetcher.js',
-    main: './src/main/index.js',
+    background: './src/background.js',
+    contentScript: './src/contentScript.js',
+    injectGlobalHook: './src/injectGlobalHook.js',
+    main: './src/main.js',
     panel: './src/panel.js',
-    proxy: './src/contentScripts/proxy.js',
-    prepareInjection: './src/contentScripts/prepareInjection.js',
-    renderer: './src/contentScripts/renderer.js',
-    installHook: './src/contentScripts/installHook.js',
+    renderer: './src/renderer.js',
   },
   output: {
     path: __dirname + '/build',
@@ -74,7 +64,12 @@ module.exports = {
     chunkFilename: '[name].chunk.js',
   },
   node: {
-    global: false,
+    // Don't define a polyfill on window.setImmediate
+    setImmediate: false,
+
+    // source-maps package has a dependency on 'fs'
+    // but this build won't trigger that code path
+    fs: 'empty',
   },
   resolve: {
     alias: {
@@ -88,40 +83,15 @@ module.exports = {
     },
   },
   optimization: {
-    minimize: !__DEV__,
-    minimizer: [
-      new TerserPlugin({
-        terserOptions: {
-          compress: {
-            unused: true,
-            dead_code: true,
-          },
-          mangle: {
-            keep_fnames: true,
-          },
-          format: {
-            comments: false,
-          },
-        },
-        extractComments: false,
-      }),
-    ],
+    minimize: false,
   },
   plugins: [
-    new Webpack.ProvidePlugin({
-      process: 'process/browser',
-      Buffer: ['buffer', 'Buffer'],
-    }),
-    new Webpack.DefinePlugin({
+    new DefinePlugin({
       __DEV__,
       __EXPERIMENTAL__: true,
       __EXTENSION__: true,
       __PROFILE__: false,
       __TEST__: NODE_ENV === 'test',
-      __IS_CHROME__: IS_CHROME,
-      __IS_FIREFOX__: IS_FIREFOX,
-      __IS_EDGE__: IS_EDGE,
-      __IS_INTERNAL_VERSION__: IS_INTERNAL_VERSION,
       'process.env.DEVTOOLS_PACKAGE': `"react-devtools-extensions"`,
       'process.env.DEVTOOLS_VERSION': `"${DEVTOOLS_VERSION}"`,
       'process.env.EDITOR_URL': EDITOR_URL != null ? `"${EDITOR_URL}"` : null,
@@ -134,27 +104,6 @@ module.exports = {
       'process.env.LIGHT_MODE_DIMMED_WARNING_COLOR': `"${LIGHT_MODE_DIMMED_WARNING_COLOR}"`,
       'process.env.LIGHT_MODE_DIMMED_ERROR_COLOR': `"${LIGHT_MODE_DIMMED_ERROR_COLOR}"`,
       'process.env.LIGHT_MODE_DIMMED_LOG_COLOR': `"${LIGHT_MODE_DIMMED_LOG_COLOR}"`,
-    }),
-    new Webpack.SourceMapDevToolPlugin({
-      filename: '[file].map',
-      noSources: !__DEV__,
-    }),
-    new SourceMapIgnoreListPlugin({
-      shouldIgnoreSource: (assetName, _source) => {
-        if (__DEV__) {
-          // Don't ignore list anything in DEV build for debugging purposes
-          return false;
-        }
-
-        const contentScriptNamesToIgnoreList = [
-          // This is where we override console
-          'installHook',
-        ];
-
-        return contentScriptNamesToIgnoreList.some(ignoreListName =>
-          assetName.startsWith(ignoreListName),
-        );
-      },
     }),
   ],
   module: {

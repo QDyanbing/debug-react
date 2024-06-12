@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -9,8 +9,6 @@
 
 import type {FrontendBridge} from 'react-devtools-shared/src/bridge';
 import type Store from 'react-devtools-shared/src/devtools/store';
-
-import {getVersionedRenderImplementation} from './utils';
 
 describe('ProfilingCache', () => {
   let PropTypes;
@@ -41,11 +39,8 @@ describe('ProfilingCache', () => {
     Scheduler = require('scheduler');
   });
 
-  const {render, getContainer} = getVersionedRenderImplementation();
-
   // @reactVersion >= 16.9
-  // @reactVersion <= 18.2
-  it('should collect data for each root (including ones added or mounted after profiling started) (legacy render)', () => {
+  it('should collect data for each root (including ones added or mounted after profiling started)', () => {
     const Parent = ({count}) => {
       Scheduler.unstable_advanceTime(10);
       const children = new Array(count)
@@ -156,116 +151,6 @@ describe('ProfilingCache', () => {
     });
   });
 
-  // @reactVersion >= 18
-  it('should collect data for each root (including ones added or mounted after profiling started) (createRoot)', () => {
-    const Parent = ({count}) => {
-      Scheduler.unstable_advanceTime(10);
-      const children = new Array(count)
-        .fill(true)
-        .map((_, index) => <Child key={index} duration={index} />);
-      return (
-        <React.Fragment>
-          {children}
-          <MemoizedChild duration={1} />
-        </React.Fragment>
-      );
-    };
-    const Child = ({duration}) => {
-      Scheduler.unstable_advanceTime(duration);
-      return null;
-    };
-    const MemoizedChild = React.memo(Child);
-
-    const RootA = ({children}) => children;
-    const RootB = ({children}) => children;
-    const RootC = ({children}) => children;
-
-    const containerA = document.createElement('div');
-    const containerB = document.createElement('div');
-    const containerC = document.createElement('div');
-
-    const rootA = ReactDOMClient.createRoot(containerA);
-    const rootB = ReactDOMClient.createRoot(containerB);
-    const rootC = ReactDOMClient.createRoot(containerC);
-
-    utils.act(() =>
-      rootA.render(
-        <RootA>
-          <Parent count={2} />
-        </RootA>,
-      ),
-    );
-    utils.act(() =>
-      rootB.render(
-        <RootB>
-          <Parent count={1} />
-        </RootB>,
-      ),
-    );
-    utils.act(() => store.profilerStore.startProfiling());
-    utils.act(() =>
-      rootA.render(
-        <RootA>
-          <Parent count={3} />
-        </RootA>,
-      ),
-    );
-    utils.act(() =>
-      rootC.render(
-        <RootC>
-          <Parent count={1} />
-        </RootC>,
-      ),
-    );
-    utils.act(() =>
-      rootA.render(
-        <RootA>
-          <Parent count={1} />
-        </RootA>,
-      ),
-    );
-    utils.act(() => rootB.unmount());
-    utils.act(() =>
-      rootA.render(
-        <RootA>
-          <Parent count={0} />
-        </RootA>,
-      ),
-    );
-    utils.act(() => store.profilerStore.stopProfiling());
-    utils.act(() => rootA.unmount());
-
-    const rootIDs = Array.from(
-      store.profilerStore.profilingData.dataForRoots.values(),
-    ).map(({rootID}) => rootID);
-    expect(rootIDs).toHaveLength(3);
-
-    const originalProfilingDataForRoot = [];
-
-    let data = store.profilerStore.getDataForRoot(rootIDs[0]);
-    expect(data.displayName).toMatchInlineSnapshot(`"RootA"`);
-    expect(data.commitData).toHaveLength(3);
-    originalProfilingDataForRoot.push(data);
-
-    data = store.profilerStore.getDataForRoot(rootIDs[1]);
-    expect(data.displayName).toMatchInlineSnapshot(`"RootC"`);
-    expect(data.commitData).toHaveLength(1);
-    originalProfilingDataForRoot.push(data);
-
-    data = store.profilerStore.getDataForRoot(rootIDs[2]);
-    expect(data.displayName).toMatchInlineSnapshot(`"RootB"`);
-    expect(data.commitData).toHaveLength(1);
-    originalProfilingDataForRoot.push(data);
-
-    utils.exportImportHelper(bridge, store);
-
-    rootIDs.forEach((rootID, index) => {
-      const current = store.profilerStore.getDataForRoot(rootID);
-      const prev = originalProfilingDataForRoot[index];
-      expect(current).toEqual(prev);
-    });
-  });
-
   // @reactVersion >= 16.9
   it('should collect data for each commit', () => {
     const Parent = ({count}) => {
@@ -286,23 +171,25 @@ describe('ProfilingCache', () => {
     };
     const MemoizedChild = React.memo(Child);
 
+    const container = document.createElement('div');
+
     utils.act(() => store.profilerStore.startProfiling());
-    utils.act(() => render(<Parent count={2} />));
-    utils.act(() => render(<Parent count={3} />));
-    utils.act(() => render(<Parent count={1} />));
-    utils.act(() => render(<Parent count={0} />));
+    utils.act(() => legacyRender(<Parent count={2} />, container));
+    utils.act(() => legacyRender(<Parent count={3} />, container));
+    utils.act(() => legacyRender(<Parent count={1} />, container));
+    utils.act(() => legacyRender(<Parent count={0} />, container));
     utils.act(() => store.profilerStore.stopProfiling());
 
     const rootID = store.roots[0];
 
-    const prevCommitData =
-      store.profilerStore.getDataForRoot(rootID).commitData;
+    const prevCommitData = store.profilerStore.getDataForRoot(rootID)
+      .commitData;
     expect(prevCommitData).toHaveLength(4);
 
     utils.exportImportHelper(bridge, store);
 
-    const nextCommitData =
-      store.profilerStore.getDataForRoot(rootID).commitData;
+    const nextCommitData = store.profilerStore.getDataForRoot(rootID)
+      .commitData;
     expect(nextCommitData).toHaveLength(4);
     nextCommitData.forEach((commitData, index) => {
       expect(commitData).toEqual(prevCommitData[index]);
@@ -310,13 +197,15 @@ describe('ProfilingCache', () => {
   });
 
   // @reactVersion >= 16.9
-  // @reactVersion <= 18.2
-  it('should record changed props/state/context/hooks for React version [16.9; 18.2] with legacy context', () => {
+  it('should record changed props/state/context/hooks', () => {
     let instance = null;
 
     const ModernContext = React.createContext(0);
 
-    class LegacyContextProvider extends React.Component<any, {count: number}> {
+    class LegacyContextProvider extends React.Component<
+      any,
+      {|count: number|},
+    > {
       static childContextTypes = {
         count: PropTypes.number,
       };
@@ -358,13 +247,19 @@ describe('ProfilingCache', () => {
       }
     }
 
+    const container = document.createElement('div');
+
     utils.act(() => store.profilerStore.startProfiling());
-    utils.act(() => render(<LegacyContextProvider />));
+    utils.act(() => legacyRender(<LegacyContextProvider />, container));
     expect(instance).not.toBeNull();
     utils.act(() => (instance: any).setState({count: 1}));
-    utils.act(() => render(<LegacyContextProvider foo={123} />));
-    utils.act(() => render(<LegacyContextProvider bar="abc" />));
-    utils.act(() => render(<LegacyContextProvider />));
+    utils.act(() =>
+      legacyRender(<LegacyContextProvider foo={123} />, container),
+    );
+    utils.act(() =>
+      legacyRender(<LegacyContextProvider bar="abc" />, container),
+    );
+    utils.act(() => legacyRender(<LegacyContextProvider />, container));
     utils.act(() => store.profilerStore.stopProfiling());
 
     const rootID = store.roots[0];
@@ -375,35 +270,35 @@ describe('ProfilingCache', () => {
     expect(changeDescriptions).toHaveLength(5);
     expect(changeDescriptions[0]).toMatchInlineSnapshot(`
       Map {
-        2 => {
+        2 => Object {
           "context": null,
           "didHooksChange": false,
           "isFirstMount": true,
           "props": null,
           "state": null,
         },
-        4 => {
+        4 => Object {
           "context": null,
           "didHooksChange": false,
           "isFirstMount": true,
           "props": null,
           "state": null,
         },
-        5 => {
+        5 => Object {
           "context": null,
           "didHooksChange": false,
           "isFirstMount": true,
           "props": null,
           "state": null,
         },
-        6 => {
+        6 => Object {
           "context": null,
           "didHooksChange": false,
           "isFirstMount": true,
           "props": null,
           "state": null,
         },
-        7 => {
+        7 => Object {
           "context": null,
           "didHooksChange": false,
           "isFirstMount": true,
@@ -414,51 +309,51 @@ describe('ProfilingCache', () => {
     `);
     expect(changeDescriptions[1]).toMatchInlineSnapshot(`
       Map {
-        5 => {
+        5 => Object {
           "context": null,
           "didHooksChange": false,
-          "hooks": [],
+          "hooks": Array [],
           "isFirstMount": false,
-          "props": [
+          "props": Array [
             "count",
           ],
           "state": null,
         },
-        4 => {
+        4 => Object {
           "context": true,
           "didHooksChange": false,
           "hooks": null,
           "isFirstMount": false,
-          "props": [],
+          "props": Array [],
           "state": null,
         },
-        7 => {
+        7 => Object {
           "context": null,
           "didHooksChange": false,
-          "hooks": [],
+          "hooks": Array [],
           "isFirstMount": false,
-          "props": [
+          "props": Array [
             "count",
           ],
           "state": null,
         },
-        6 => {
-          "context": [
+        6 => Object {
+          "context": Array [
             "count",
           ],
           "didHooksChange": false,
           "hooks": null,
           "isFirstMount": false,
-          "props": [],
+          "props": Array [],
           "state": null,
         },
-        2 => {
+        2 => Object {
           "context": null,
           "didHooksChange": false,
-          "hooks": [],
+          "hooks": Array [],
           "isFirstMount": false,
-          "props": [],
-          "state": [
+          "props": Array [],
+          "state": Array [
             "count",
           ],
         },
@@ -466,518 +361,143 @@ describe('ProfilingCache', () => {
     `);
     expect(changeDescriptions[2]).toMatchInlineSnapshot(`
       Map {
-        5 => {
+        5 => Object {
           "context": null,
           "didHooksChange": false,
-          "hooks": [],
+          "hooks": Array [],
           "isFirstMount": false,
-          "props": [],
+          "props": Array [],
           "state": null,
         },
-        4 => {
+        4 => Object {
           "context": false,
           "didHooksChange": false,
           "hooks": null,
           "isFirstMount": false,
-          "props": [],
+          "props": Array [],
           "state": null,
         },
-        7 => {
+        7 => Object {
           "context": null,
           "didHooksChange": false,
-          "hooks": [],
+          "hooks": Array [],
           "isFirstMount": false,
-          "props": [],
+          "props": Array [],
           "state": null,
         },
-        6 => {
-          "context": [],
+        6 => Object {
+          "context": Array [],
           "didHooksChange": false,
           "hooks": null,
           "isFirstMount": false,
-          "props": [],
+          "props": Array [],
           "state": null,
         },
-        2 => {
+        2 => Object {
           "context": null,
           "didHooksChange": false,
-          "hooks": [],
+          "hooks": Array [],
           "isFirstMount": false,
-          "props": [
+          "props": Array [
             "foo",
           ],
-          "state": [],
+          "state": Array [],
         },
       }
     `);
     expect(changeDescriptions[3]).toMatchInlineSnapshot(`
       Map {
-        5 => {
+        5 => Object {
           "context": null,
           "didHooksChange": false,
-          "hooks": [],
+          "hooks": Array [],
           "isFirstMount": false,
-          "props": [],
+          "props": Array [],
           "state": null,
         },
-        4 => {
+        4 => Object {
           "context": false,
           "didHooksChange": false,
           "hooks": null,
           "isFirstMount": false,
-          "props": [],
+          "props": Array [],
           "state": null,
         },
-        7 => {
+        7 => Object {
           "context": null,
           "didHooksChange": false,
-          "hooks": [],
+          "hooks": Array [],
           "isFirstMount": false,
-          "props": [],
+          "props": Array [],
           "state": null,
         },
-        6 => {
-          "context": [],
+        6 => Object {
+          "context": Array [],
           "didHooksChange": false,
           "hooks": null,
           "isFirstMount": false,
-          "props": [],
+          "props": Array [],
           "state": null,
         },
-        2 => {
+        2 => Object {
           "context": null,
           "didHooksChange": false,
-          "hooks": [],
+          "hooks": Array [],
           "isFirstMount": false,
-          "props": [
+          "props": Array [
             "foo",
             "bar",
           ],
-          "state": [],
+          "state": Array [],
         },
       }
     `);
     expect(changeDescriptions[4]).toMatchInlineSnapshot(`
       Map {
-        5 => {
+        5 => Object {
           "context": null,
           "didHooksChange": false,
-          "hooks": [],
+          "hooks": Array [],
           "isFirstMount": false,
-          "props": [],
+          "props": Array [],
           "state": null,
         },
-        4 => {
+        4 => Object {
           "context": false,
           "didHooksChange": false,
           "hooks": null,
           "isFirstMount": false,
-          "props": [],
+          "props": Array [],
           "state": null,
         },
-        7 => {
+        7 => Object {
           "context": null,
           "didHooksChange": false,
-          "hooks": [],
+          "hooks": Array [],
           "isFirstMount": false,
-          "props": [],
+          "props": Array [],
           "state": null,
         },
-        6 => {
-          "context": [],
+        6 => Object {
+          "context": Array [],
           "didHooksChange": false,
           "hooks": null,
           "isFirstMount": false,
-          "props": [],
+          "props": Array [],
           "state": null,
         },
-        2 => {
+        2 => Object {
           "context": null,
           "didHooksChange": false,
-          "hooks": [],
+          "hooks": Array [],
           "isFirstMount": false,
-          "props": [
+          "props": Array [
             "bar",
           ],
-          "state": [],
+          "state": Array [],
         },
       }
     `);
-
-    utils.exportImportHelper(bridge, store);
-
-    const prevChangeDescriptions = [...changeDescriptions];
-
-    changeDescriptions = store.profilerStore
-      .getDataForRoot(rootID)
-      .commitData.map(commitData => commitData.changeDescriptions);
-    expect(changeDescriptions).toHaveLength(5);
-
-    for (let commitIndex = 0; commitIndex < 5; commitIndex++) {
-      expect(changeDescriptions[commitIndex]).toEqual(
-        prevChangeDescriptions[commitIndex],
-      );
-    }
-  });
-
-  // @reactVersion > 18.2
-  // @gate !disableLegacyContext
-  it('should record changed props/state/context/hooks for React version (18.2; ∞) with legacy context enabled', () => {
-    let instance = null;
-
-    const ModernContext = React.createContext(0);
-
-    class LegacyContextProvider extends React.Component<any, {count: number}> {
-      static childContextTypes = {
-        count: PropTypes.number,
-      };
-      state = {count: 0};
-      getChildContext() {
-        return this.state;
-      }
-      render() {
-        instance = this;
-        return (
-          <ModernContext.Provider value={this.state.count}>
-            <React.Fragment>
-              <ModernContextConsumer />
-              <LegacyContextConsumer />
-            </React.Fragment>
-          </ModernContext.Provider>
-        );
-      }
-    }
-
-    const FunctionComponentWithHooks = ({count}) => {
-      React.useMemo(() => count, [count]);
-      return null;
-    };
-
-    class ModernContextConsumer extends React.Component<any> {
-      static contextType = ModernContext;
-      render() {
-        return <FunctionComponentWithHooks count={this.context} />;
-      }
-    }
-
-    class LegacyContextConsumer extends React.Component<any> {
-      static contextTypes = {
-        count: PropTypes.number,
-      };
-      render() {
-        return <FunctionComponentWithHooks count={this.context.count} />;
-      }
-    }
-
-    utils.act(() => store.profilerStore.startProfiling());
-    utils.act(() => render(<LegacyContextProvider />));
-    expect(instance).not.toBeNull();
-    utils.act(() => (instance: any).setState({count: 1}));
-    utils.act(() => render(<LegacyContextProvider foo={123} />));
-    utils.act(() => render(<LegacyContextProvider bar="abc" />));
-    utils.act(() => render(<LegacyContextProvider />));
-    utils.act(() => store.profilerStore.stopProfiling());
-
-    const rootID = store.roots[0];
-
-    let changeDescriptions = store.profilerStore
-      .getDataForRoot(rootID)
-      .commitData.map(commitData => commitData.changeDescriptions);
-    expect(changeDescriptions).toHaveLength(5);
-    expect(changeDescriptions[0]).toEqual(
-      new Map([
-        [
-          2,
-          {
-            context: null,
-            didHooksChange: false,
-            isFirstMount: true,
-            props: null,
-            state: null,
-          },
-        ],
-        [
-          4,
-          {
-            context: null,
-            didHooksChange: false,
-            isFirstMount: true,
-            props: null,
-            state: null,
-          },
-        ],
-        [
-          5,
-          {
-            context: null,
-            didHooksChange: false,
-            isFirstMount: true,
-            props: null,
-            state: null,
-          },
-        ],
-        [
-          6,
-          {
-            context: null,
-            didHooksChange: false,
-            isFirstMount: true,
-            props: null,
-            state: null,
-          },
-        ],
-        [
-          7,
-          {
-            context: null,
-            didHooksChange: false,
-            isFirstMount: true,
-            props: null,
-            state: null,
-          },
-        ],
-      ]),
-    );
-
-    expect(changeDescriptions[1]).toEqual(
-      new Map([
-        [
-          5,
-          {
-            context: null,
-            didHooksChange: false,
-            hooks: [],
-            isFirstMount: false,
-            props: ['count'],
-            state: null,
-          },
-        ],
-        [
-          4,
-          {
-            context: true,
-            didHooksChange: false,
-            hooks: null,
-            isFirstMount: false,
-            props: [],
-            state: null,
-          },
-        ],
-        [
-          7,
-          {
-            context: null,
-            didHooksChange: false,
-            hooks: [],
-            isFirstMount: false,
-            props: ['count'],
-            state: null,
-          },
-        ],
-        [
-          6,
-          {
-            context: ['count'],
-            didHooksChange: false,
-            hooks: null,
-            isFirstMount: false,
-            props: [],
-            state: null,
-          },
-        ],
-        [
-          2,
-          {
-            context: null,
-            didHooksChange: false,
-            hooks: [],
-            isFirstMount: false,
-            props: [],
-            state: ['count'],
-          },
-        ],
-      ]),
-    );
-
-    expect(changeDescriptions[2]).toEqual(
-      new Map([
-        [
-          5,
-          {
-            context: null,
-            didHooksChange: false,
-            hooks: [],
-            isFirstMount: false,
-            props: [],
-            state: null,
-          },
-        ],
-        [
-          4,
-          {
-            context: false,
-            didHooksChange: false,
-            hooks: null,
-            isFirstMount: false,
-            props: [],
-            state: null,
-          },
-        ],
-        [
-          7,
-          {
-            context: null,
-            didHooksChange: false,
-            hooks: [],
-            isFirstMount: false,
-            props: [],
-            state: null,
-          },
-        ],
-        [
-          6,
-          {
-            context: [],
-            didHooksChange: false,
-            hooks: null,
-            isFirstMount: false,
-            props: [],
-            state: null,
-          },
-        ],
-        [
-          2,
-          {
-            context: null,
-            didHooksChange: false,
-            hooks: [],
-            isFirstMount: false,
-            props: ['foo'],
-            state: [],
-          },
-        ],
-      ]),
-    );
-
-    expect(changeDescriptions[3]).toEqual(
-      new Map([
-        [
-          5,
-          {
-            context: null,
-            didHooksChange: false,
-            hooks: [],
-            isFirstMount: false,
-            props: [],
-            state: null,
-          },
-        ],
-        [
-          4,
-          {
-            context: false,
-            didHooksChange: false,
-            hooks: null,
-            isFirstMount: false,
-            props: [],
-            state: null,
-          },
-        ],
-        [
-          7,
-          {
-            context: null,
-            didHooksChange: false,
-            hooks: [],
-            isFirstMount: false,
-            props: [],
-            state: null,
-          },
-        ],
-        [
-          6,
-          {
-            context: [],
-            didHooksChange: false,
-            hooks: null,
-            isFirstMount: false,
-            props: [],
-            state: null,
-          },
-        ],
-        [
-          2,
-          {
-            context: null,
-            didHooksChange: false,
-            hooks: [],
-            isFirstMount: false,
-            props: ['foo', 'bar'],
-            state: [],
-          },
-        ],
-      ]),
-    );
-
-    expect(changeDescriptions[4]).toEqual(
-      new Map([
-        [
-          5,
-          {
-            context: null,
-            didHooksChange: false,
-            hooks: [],
-            isFirstMount: false,
-            props: [],
-            state: null,
-          },
-        ],
-        [
-          4,
-          {
-            context: false,
-            didHooksChange: false,
-            hooks: null,
-            isFirstMount: false,
-            props: [],
-            state: null,
-          },
-        ],
-        [
-          7,
-          {
-            context: null,
-            didHooksChange: false,
-            hooks: [],
-            isFirstMount: false,
-            props: [],
-            state: null,
-          },
-        ],
-        [
-          6,
-          {
-            context: [],
-            didHooksChange: false,
-            hooks: null,
-            isFirstMount: false,
-            props: [],
-            state: null,
-          },
-        ],
-        [
-          2,
-          {
-            context: null,
-            didHooksChange: false,
-            hooks: [],
-            isFirstMount: false,
-            props: ['bar'],
-            state: [],
-          },
-        ],
-      ]),
-    );
 
     utils.exportImportHelper(bridge, store);
 
@@ -1057,21 +577,25 @@ describe('ProfilingCache', () => {
       return null;
     };
 
+    const container = document.createElement('div');
+
     utils.act(() => store.profilerStore.startProfiling());
     utils.act(() =>
-      render(
+      legacyRender(
         <Context.Provider value={true}>
           <Component count={1} />
         </Context.Provider>,
+        container,
       ),
     );
 
     // Second render has no changed hooks, only changed props.
     utils.act(() =>
-      render(
+      legacyRender(
         <Context.Provider value={true}>
           <Component count={2} />
         </Context.Provider>,
+        container,
       ),
     );
 
@@ -1083,10 +607,11 @@ describe('ProfilingCache', () => {
 
     // Fifth render has a changed context value, but no changed hook.
     utils.act(() =>
-      render(
+      legacyRender(
         <Context.Provider value={false}>
           <Component count={2} />
         </Context.Provider>,
+        container,
       ),
     );
 
@@ -1108,7 +633,7 @@ describe('ProfilingCache', () => {
     // 1st render: No change
     expect(changeDescriptions[0]).toMatchInlineSnapshot(`
       Map {
-        3 => {
+        3 => Object {
           "context": null,
           "didHooksChange": false,
           "isFirstMount": true,
@@ -1121,12 +646,12 @@ describe('ProfilingCache', () => {
     // 2nd render: Changed props
     expect(changeDescriptions[1]).toMatchInlineSnapshot(`
       Map {
-        3 => {
+        3 => Object {
           "context": false,
           "didHooksChange": false,
-          "hooks": [],
+          "hooks": Array [],
           "isFirstMount": false,
-          "props": [
+          "props": Array [
             "count",
           ],
           "state": null,
@@ -1137,14 +662,14 @@ describe('ProfilingCache', () => {
     // 3rd render: Changed useReducer
     expect(changeDescriptions[2]).toMatchInlineSnapshot(`
       Map {
-        3 => {
+        3 => Object {
           "context": false,
           "didHooksChange": true,
-          "hooks": [
+          "hooks": Array [
             1,
           ],
           "isFirstMount": false,
-          "props": [],
+          "props": Array [],
           "state": null,
         },
       }
@@ -1153,14 +678,14 @@ describe('ProfilingCache', () => {
     // 4th render: Changed useState
     expect(changeDescriptions[3]).toMatchInlineSnapshot(`
       Map {
-        3 => {
+        3 => Object {
           "context": false,
           "didHooksChange": true,
-          "hooks": [
+          "hooks": Array [
             0,
           ],
           "isFirstMount": false,
-          "props": [],
+          "props": Array [],
           "state": null,
         },
       }
@@ -1169,12 +694,12 @@ describe('ProfilingCache', () => {
     // 5th render: Changed context
     expect(changeDescriptions[4]).toMatchInlineSnapshot(`
       Map {
-        3 => {
+        3 => Object {
           "context": true,
           "didHooksChange": false,
-          "hooks": [],
+          "hooks": Array [],
           "isFirstMount": false,
-          "props": [],
+          "props": Array [],
           "state": null,
         },
       }
@@ -1183,14 +708,14 @@ describe('ProfilingCache', () => {
     // 6th render: Sync external store
     expect(changeDescriptions[5]).toMatchInlineSnapshot(`
       Map {
-        3 => {
+        3 => Object {
           "context": false,
           "didHooksChange": true,
-          "hooks": [
+          "hooks": Array [
             2,
           ],
           "isFirstMount": false,
-          "props": [],
+          "props": Array [],
           "state": null,
         },
       }
@@ -1232,7 +757,9 @@ describe('ProfilingCache', () => {
     };
 
     utils.act(() => store.profilerStore.startProfiling());
-    utils.act(() => render(<Grandparent />));
+    utils.act(() =>
+      legacyRender(<Grandparent />, document.createElement('div')),
+    );
     utils.act(() => store.profilerStore.stopProfiling());
 
     expect(store).toMatchInlineSnapshot(`
@@ -1298,7 +825,9 @@ describe('ProfilingCache', () => {
     };
 
     utils.act(() => store.profilerStore.startProfiling());
-    await utils.actAsync(() => render(<Parent />));
+    await utils.actAsync(() =>
+      legacyRender(<Parent />, document.createElement('div')),
+    );
     utils.act(() => store.profilerStore.stopProfiling());
 
     const rootID = store.roots[0];
@@ -1354,10 +883,12 @@ describe('ProfilingCache', () => {
     };
     const MemoizedChild = React.memo(Child);
 
+    const container = document.createElement('div');
+
     utils.act(() => store.profilerStore.startProfiling());
-    utils.act(() => render(<Parent count={1} />));
-    utils.act(() => render(<Parent count={2} />));
-    utils.act(() => render(<Parent count={3} />));
+    utils.act(() => legacyRender(<Parent count={1} />, container));
+    utils.act(() => legacyRender(<Parent count={2} />, container));
+    utils.act(() => legacyRender(<Parent count={3} />, container));
     utils.act(() => store.profilerStore.stopProfiling());
 
     const rootID = store.roots[0];
@@ -1373,25 +904,25 @@ describe('ProfilingCache', () => {
     }
 
     expect(allFiberCommits).toMatchInlineSnapshot(`
-      [
-        [
+      Array [
+        Array [
           0,
           1,
           2,
         ],
-        [
+        Array [
           0,
           1,
           2,
         ],
-        [
+        Array [
           1,
           2,
         ],
-        [
+        Array [
           2,
         ],
-        [
+        Array [
           0,
         ],
       ]
@@ -1410,20 +941,19 @@ describe('ProfilingCache', () => {
     }
   });
 
-  // @reactVersion >= 18.0.0
-  // @reactVersion <= 18.2.0
-  it('should handle unexpectedly shallow suspense trees for react v[18.0.0 - 18.2.0] (legacy render)', () => {
+  // @reactVersion >= 18.0
+  it('should handle unexpectedly shallow suspense trees', () => {
+    const container = document.createElement('div');
+
     utils.act(() => store.profilerStore.startProfiling());
-    utils.act(() =>
-      legacyRender(<React.Suspense />, document.createElement('div')),
-    );
+    utils.act(() => legacyRender(<React.Suspense />, container));
     utils.act(() => store.profilerStore.stopProfiling());
 
     const rootID = store.roots[0];
     const commitData = store.profilerStore.getDataForRoot(rootID).commitData;
     expect(commitData).toMatchInlineSnapshot(`
-      [
-        {
+      Array [
+        Object {
           "changeDescriptions": Map {},
           "duration": 0,
           "effectDuration": null,
@@ -1438,91 +968,9 @@ describe('ProfilingCache', () => {
           "passiveEffectDuration": null,
           "priorityLevel": "Immediate",
           "timestamp": 0,
-          "updaters": [
-            {
-              "compiledWithForget": false,
+          "updaters": Array [
+            Object {
               "displayName": "render()",
-              "hocDisplayNames": null,
-              "id": 1,
-              "key": null,
-              "type": 11,
-            },
-          ],
-        },
-      ]
-    `);
-  });
-
-  // @reactVersion >= 18.0.0
-  // @reactVersion <= 18.2.0
-  it('should handle unexpectedly shallow suspense trees for react v[18.0.0 - 18.2.0] (createRoot)', () => {
-    utils.act(() => store.profilerStore.startProfiling());
-    utils.act(() => render(<React.Suspense />));
-    utils.act(() => store.profilerStore.stopProfiling());
-
-    const rootID = store.roots[0];
-    const commitData = store.profilerStore.getDataForRoot(rootID).commitData;
-    expect(commitData).toMatchInlineSnapshot(`
-      [
-        {
-          "changeDescriptions": Map {},
-          "duration": 0,
-          "effectDuration": null,
-          "fiberActualDurations": Map {
-            1 => 0,
-            2 => 0,
-          },
-          "fiberSelfDurations": Map {
-            1 => 0,
-            2 => 0,
-          },
-          "passiveEffectDuration": null,
-          "priorityLevel": "Normal",
-          "timestamp": 0,
-          "updaters": [
-            {
-              "compiledWithForget": false,
-              "displayName": "createRoot()",
-              "hocDisplayNames": null,
-              "id": 1,
-              "key": null,
-              "type": 11,
-            },
-          ],
-        },
-      ]
-    `);
-  });
-
-  // @reactVersion > 18.2.0
-  it('should handle unexpectedly shallow suspense trees', () => {
-    utils.act(() => store.profilerStore.startProfiling());
-    utils.act(() => render(<React.Suspense />));
-    utils.act(() => store.profilerStore.stopProfiling());
-
-    const rootID = store.roots[0];
-    const commitData = store.profilerStore.getDataForRoot(rootID).commitData;
-    expect(commitData).toMatchInlineSnapshot(`
-      [
-        {
-          "changeDescriptions": Map {},
-          "duration": 0,
-          "effectDuration": null,
-          "fiberActualDurations": Map {
-            1 => 0,
-            2 => 0,
-          },
-          "fiberSelfDurations": Map {
-            1 => 0,
-            2 => 0,
-          },
-          "passiveEffectDuration": null,
-          "priorityLevel": "Normal",
-          "timestamp": 0,
-          "updaters": [
-            {
-              "compiledWithForget": false,
-              "displayName": "createRoot()",
               "hocDisplayNames": null,
               "id": 1,
               "key": null,
@@ -1613,16 +1061,15 @@ describe('ProfilingCache', () => {
       );
     }
 
-    utils.act(() => render(<App />));
-    expect(getContainer().textContent).toBe('Home');
+    const {Simulate} = require('react-dom/test-utils');
+
+    const container = document.createElement('div');
+    utils.act(() => legacyRender(<App />, container));
+    expect(container.textContent).toBe('Home');
     utils.act(() => store.profilerStore.startProfiling());
-    utils.act(() =>
-      linkRef.current.dispatchEvent(
-        new MouseEvent('click', {bubbles: true, cancelable: true}),
-      ),
-    );
+    utils.act(() => Simulate.click(linkRef.current));
     utils.act(() => store.profilerStore.stopProfiling());
-    expect(getContainer().textContent).toBe('About');
+    expect(container.textContent).toBe('About');
   });
 
   // @reactVersion >= 18.0
@@ -1650,10 +1097,8 @@ describe('ProfilingCache', () => {
     utils.act(() => setChildUnmounted(true));
     utils.act(() => store.profilerStore.stopProfiling());
 
-    const updaters = store.profilerStore.getCommitData(
-      store.roots[0],
-      0,
-    ).updaters;
+    const updaters = store.profilerStore.getCommitData(store.roots[0], 0)
+      .updaters;
     expect(updaters.length).toEqual(1);
     expect(updaters[0].displayName).toEqual('App');
   });
@@ -1687,10 +1132,8 @@ describe('ProfilingCache', () => {
     utils.act(() => setChildUnmounted(true));
     utils.act(() => store.profilerStore.stopProfiling());
 
-    const updaters = store.profilerStore.getCommitData(
-      store.roots[0],
-      0,
-    ).updaters;
+    const updaters = store.profilerStore.getCommitData(store.roots[0], 0)
+      .updaters;
     expect(updaters.length).toEqual(1);
     expect(updaters[0].displayName).toEqual('App');
   });
@@ -1719,10 +1162,8 @@ describe('ProfilingCache', () => {
     utils.act(() => setChildUnmounted(true));
     utils.act(() => store.profilerStore.stopProfiling());
 
-    const updaters = store.profilerStore.getCommitData(
-      store.roots[0],
-      0,
-    ).updaters;
+    const updaters = store.profilerStore.getCommitData(store.roots[0], 0)
+      .updaters;
     expect(updaters.length).toEqual(1);
     expect(updaters[0].displayName).toEqual('App');
   });

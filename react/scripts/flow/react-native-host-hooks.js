@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -9,31 +9,25 @@
 
 /* eslint-disable */
 
-// libdefs cannot actually import. These are supposed to be the types imported
-// from 'react-native-renderer/src/ReactNativeTypes'
-type __MeasureOnSuccessCallback = any;
-type __MeasureInWindowOnSuccessCallback = any;
-type __MeasureLayoutOnSuccessCallback = any;
-type __ReactNativeBaseComponentViewConfig = any;
-type __ViewConfigGetter = any;
-type __ViewConfig = any;
+import type {
+  MeasureOnSuccessCallback,
+  MeasureInWindowOnSuccessCallback,
+  MeasureLayoutOnSuccessCallback,
+  ReactNativeBaseComponentViewConfig,
+  ViewConfigGetter,
+} from 'react-native-renderer/src/ReactNativeTypes';
+import type {RNTopLevelEventType} from 'react-native-renderer/src/legacy-events/TopLevelEventTypes';
+import type {CapturedError} from 'react-reconciler/src/ReactCapturedValue';
+import type {Fiber} from 'react-reconciler/src/ReactInternalTypes';
 
-// libdefs cannot actually import. This is supposed to be the type imported
-// from 'react-native-renderer/src/legacy-events/TopLevelEventTypes';
-type __RNTopLevelEventType = any;
-
-// libdefs cannot actually import. This is supposed to be the type imported
-// from 'react-reconciler/src/ReactCapturedValue'
-type __CapturedError = any;
-
-type DeepDifferOptions = {+unsafelyIgnoreFunctions?: boolean};
-type RawEventEmitterEvent = $ReadOnly<{
+type DeepDifferOptions = {|+unsafelyIgnoreFunctions?: boolean|};
+type RawEventEmitterEvent = $ReadOnly<{|
   eventName: string,
   // We expect, but do not/cannot require, that nativeEvent is an object
   // with the properties: key, elementType (string), type (string), tag (numeric),
   // and a stateNode of the native element/Fiber the event was emitted to.
-  nativeEvent: {[string]: mixed, ...},
-}>;
+  nativeEvent: {[string]: mixed},
+|}>;
 
 declare module 'react-native/Libraries/ReactPrivate/ReactNativePrivateInterface' {
   declare export function deepDiffer(
@@ -49,21 +43,21 @@ declare module 'react-native/Libraries/ReactPrivate/ReactNativePrivateInterface'
   ): boolean;
   declare export function deepFreezeAndThrowOnMutationInDev<T>(obj: T): T;
   declare export function flattenStyle(style: any): any;
-  declare export const RCTEventEmitter: {
+  declare export var RCTEventEmitter: {
     register: (eventEmitter: mixed) => void,
     ...
   };
-  declare export const TextInputState: {
+  declare export var TextInputState: {
     blurTextInput: (object: any) => void,
     focusTextInput: (object: any) => void,
     ...
   };
-  declare export const ReactFiberErrorDialog: {
-    showErrorDialog: (error: __CapturedError) => boolean,
+  declare export var ReactFiberErrorDialog: {
+    showErrorDialog: (error: CapturedError) => boolean,
     ...
   };
-  declare export const Platform: {OS: string, ...};
-  declare export const UIManager: {
+  declare export var Platform: {OS: string, ...};
+  declare export var UIManager: {
     customBubblingEventTypes: Object,
     customDirectEventTypes: Object,
     createView: (
@@ -123,55 +117,36 @@ declare module 'react-native/Libraries/ReactPrivate/ReactNativePrivateInterface'
     ) => void,
     ...
   };
-  declare export const legacySendAccessibilityEvent: (
+  declare export var legacySendAccessibilityEvent: (
     reactTag: number,
     eventTypeName: string,
   ) => void;
-  declare export const BatchedBridge: {
+  declare export var BatchedBridge: {
     registerCallableModule: (name: string, module: Object) => void,
     ...
   };
-  declare export const ReactNativeViewConfigRegistry: {
+  declare export var ReactNativeViewConfigRegistry: {
     customBubblingEventTypes: Object,
     customDirectEventTypes: Object,
+    eventTypes: Object,
 
-    register: (name: string, callback: __ViewConfigGetter) => string,
-    get: (name: string) => __ReactNativeBaseComponentViewConfig,
+    register: (name: string, callback: ViewConfigGetter) => string,
+    get: (name: string) => ReactNativeBaseComponentViewConfig,
     ...
   };
-  declare export const RawEventEmitter: {
+  declare export var RawEventEmitter: {
     emit: (channel: string, event: RawEventEmitterEvent) => string,
     ...
   };
-  declare export opaque type PublicInstance;
-  declare export opaque type PublicTextInstance;
-  declare export function getNodeFromPublicInstance(
-    publicInstance: PublicInstance,
-  ): Object;
-  declare export function getNativeTagFromPublicInstance(
-    publicInstance: PublicInstance,
-  ): number;
-  declare export function createPublicInstance(
-    tag: number,
-    viewConfig: __ViewConfig,
-    internalInstanceHandle: mixed,
-  ): PublicInstance;
-  declare export function createPublicTextInstance(
-    internalInstanceHandle: mixed,
-  ): PublicTextInstance;
-  declare export function getInternalInstanceHandleFromPublicInstance(
-    publicInstance: PublicInstance,
-  ): ?Object;
+  declare export var CustomEvent: CustomEvent;
 }
 
 declare module 'react-native/Libraries/ReactPrivate/ReactNativePrivateInitializeCore' {
 }
 
-declare const RN$enableMicrotasksInReact: boolean;
-
 // This is needed for a short term solution.
 // See https://github.com/facebook/react/pull/15490 for more info
-declare const nativeFabricUIManager: {
+declare var nativeFabricUIManager: {
   createNode: (
     reactTag: number,
     viewName: string,
@@ -180,59 +155,44 @@ declare const nativeFabricUIManager: {
     eventTarget: Object,
   ) => Object,
   cloneNode: (node: Object) => Object,
-  cloneNodeWithNewChildren: (
-    node: Object,
-    children?: $ReadOnlyArray<Object>,
-  ) => Object,
+  cloneNodeWithNewChildren: (node: Object) => Object,
   cloneNodeWithNewProps: (node: Object, newProps: ?Object) => Object,
-  cloneNodeWithNewChildrenAndProps: (
-    node: Object,
-    newPropsOrChildren: ?Object | $ReadOnlyArray<Object>,
-    newProps?: ?Object,
-  ) => Object,
+  cloneNodeWithNewChildrenAndProps: (node: Object, newProps: ?Object) => Object,
   appendChild: (node: Object, childNode: Object) => void,
 
-  createChildSet: () => Object,
+  createChildSet: (rootTag: number) => Object,
   appendChildToSet: (childSet: Object, childNode: Object) => void,
   completeRoot: (rootTag: number, childSet: Object) => void,
   registerEventHandler: (
     callback: (
       eventTarget: null | Object,
-      type: __RNTopLevelEventType,
+      type: RNTopLevelEventType,
       payload: Object,
     ) => void,
   ) => void,
-  setNativeProps: (node: Object, nativeProps: Object) => Object,
+
   dispatchCommand: (node: Object, command: string, args: Array<any>) => void,
   sendAccessibilityEvent: (node: Object, eventTypeName: string) => void,
 
-  measure: (node: Object, callback: __MeasureOnSuccessCallback) => void,
+  measure: (node: Node, callback: MeasureOnSuccessCallback) => void,
   measureInWindow: (
-    node: Object,
-    callback: __MeasureInWindowOnSuccessCallback,
+    node: Node,
+    callback: MeasureInWindowOnSuccessCallback,
   ) => void,
   measureLayout: (
-    node: Object,
-    relativeNode: Object,
+    node: Node,
+    relativeNode: Node,
     onFail: () => void,
-    onSuccess: __MeasureLayoutOnSuccessCallback,
+    onSuccess: MeasureLayoutOnSuccessCallback,
   ) => void,
-  getBoundingClientRect: (
-    node: Object,
-  ) => [
-    /* x:*/ number,
-    /* y:*/ number,
-    /* width:*/ number,
-    /* height:*/ number,
-  ],
   findNodeAtPoint: (
-    node: Object,
+    node: Node,
     locationX: number,
     locationY: number,
-    callback: (Object) => void,
+    callback: (Fiber) => void,
   ) => void,
   setIsJSResponder: (
-    node: Object,
+    node: Node,
     isJsResponder: boolean,
     blockNativeResponder: boolean,
   ) => void,
@@ -241,3 +201,33 @@ declare const nativeFabricUIManager: {
   unstable_getCurrentEventPriority: () => number,
   ...
 };
+
+declare module 'View' {
+  declare module.exports: typeof React$Component;
+}
+
+declare module 'RTManager' {
+  declare function createNode(
+    tag: number,
+    classType: string,
+    props: ?Object,
+  ): void;
+
+  declare function beginUpdates(): void;
+
+  declare function appendChildToContext(
+    contextTag: number,
+    childTag: number,
+  ): void;
+  declare function appendChild(parentTag: number, childTag: number): void;
+  declare function prependChild(childTag: number, beforeTag: number): void;
+  declare function deleteChild(childTag: number): void;
+  declare function updateNode(tag: number, props: ?Object): void;
+
+  declare function completeUpdates(): void;
+}
+
+// shims/ReactFeatureFlags is generated by the packaging script
+declare module '../shims/ReactFeatureFlags' {
+  declare export var debugRenderPhaseSideEffects: boolean;
+}

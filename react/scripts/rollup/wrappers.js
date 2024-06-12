@@ -1,16 +1,18 @@
 'use strict';
 
+const {resolve} = require('path');
+const {readFileSync} = require('fs');
 const {bundleTypes, moduleTypes} = require('./bundles');
 
 const {
   NODE_ES2015,
-  ESM_DEV,
-  ESM_PROD,
+  NODE_ESM,
+  UMD_DEV,
+  UMD_PROD,
+  UMD_PROFILING,
   NODE_DEV,
   NODE_PROD,
   NODE_PROFILING,
-  BUN_DEV,
-  BUN_PROD,
   FB_WWW_DEV,
   FB_WWW_PROD,
   FB_WWW_PROFILING,
@@ -20,70 +22,104 @@ const {
   RN_FB_DEV,
   RN_FB_PROD,
   RN_FB_PROFILING,
-  BROWSER_SCRIPT,
 } = bundleTypes;
 
 const {RECONCILER} = moduleTypes;
 
 const USE_STRICT_HEADER_REGEX = /'use strict';\n+/;
 
-function wrapWithRegisterInternalModule(source) {
-  return `\
-'use strict';
-if (
-  typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ !== 'undefined' &&
-  typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart ===
-    'function'
-) {
-  __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStart(new Error());
-}
-${source}
-if (
-  typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ !== 'undefined' &&
-  typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop ===
-    'function'
-) {
-  __REACT_DEVTOOLS_GLOBAL_HOOK__.registerInternalModuleStop(new Error());
-}
-`;
+function registerInternalModuleStart(globalName) {
+  const path = resolve(__dirname, 'wrappers', 'registerInternalModuleBegin.js');
+  const file = readFileSync(path);
+  return String(file).trim();
 }
 
-const license = ` * Copyright (c) Meta Platforms, Inc. and affiliates.
+function registerInternalModuleStop(globalName) {
+  const path = resolve(__dirname, 'wrappers', 'registerInternalModuleEnd.js');
+  const file = readFileSync(path);
+
+  // Remove the 'use strict' directive from the footer.
+  // This directive is only meaningful when it is the first statement in a file or function.
+  return String(file)
+    .replace(USE_STRICT_HEADER_REGEX, '')
+    .trim();
+}
+
+const license = ` * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.`;
 
-const topLevelDefinitionWrappers = {
+const wrappers = {
   /***************** NODE_ES2015 *****************/
   [NODE_ES2015](source, globalName, filename, moduleType) {
-    return `'use strict';
+    return `/**
+ * @license React
+ * ${filename}
+ *
+${license}
+ */
+
+'use strict';
 
 ${source}`;
   },
 
-  /***************** ESM_DEV *****************/
-  [ESM_DEV](source, globalName, filename, moduleType) {
-    return source;
+  /***************** NODE_ESM *****************/
+  [NODE_ESM](source, globalName, filename, moduleType) {
+    return `/**
+* @license React
+ * ${filename}
+ *
+${license}
+ */
+
+${source}`;
   },
 
-  /***************** ESM_PROD *****************/
-  [ESM_PROD](source, globalName, filename, moduleType) {
-    return source;
+  /***************** UMD_DEV *****************/
+  [UMD_DEV](source, globalName, filename, moduleType) {
+    return `/**
+ * @license React
+ * ${filename}
+ *
+${license}
+ */
+${source}`;
   },
 
-  /***************** BUN_DEV *****************/
-  [BUN_DEV](source, globalName, filename, moduleType) {
-    return source;
+  /***************** UMD_PROD *****************/
+  [UMD_PROD](source, globalName, filename, moduleType) {
+    return `/**
+ * @license React
+ * ${filename}
+ *
+${license}
+ */
+(function(){${source}})();`;
   },
 
-  /***************** BUN_PROD *****************/
-  [BUN_PROD](source, globalName, filename, moduleType) {
-    return source;
+  /***************** UMD_PROFILING *****************/
+  [UMD_PROFILING](source, globalName, filename, moduleType) {
+    return `/**
+ * @license React
+ * ${filename}
+ *
+${license}
+ */
+(function(){${source}})();`;
   },
 
   /***************** NODE_DEV *****************/
   [NODE_DEV](source, globalName, filename, moduleType) {
-    return `'use strict';
+    return `/**
+ * @license React
+ * ${filename}
+ *
+${license}
+ */
+
+'use strict';
 
 if (process.env.NODE_ENV !== "production") {
   (function() {
@@ -94,17 +130,38 @@ ${source}
 
   /***************** NODE_PROD *****************/
   [NODE_PROD](source, globalName, filename, moduleType) {
-    return source;
+    return `/**
+ * @license React
+ * ${filename}
+ *
+${license}
+ */
+${source}`;
   },
 
   /***************** NODE_PROFILING *****************/
   [NODE_PROFILING](source, globalName, filename, moduleType) {
-    return source;
+    return `/**
+ * @license React
+ * ${filename}
+ *
+${license}
+ */
+${source}`;
   },
 
   /****************** FB_WWW_DEV ******************/
   [FB_WWW_DEV](source, globalName, filename, moduleType) {
-    return `'use strict';
+    return `/**
+${license}
+ *
+ * @noflow
+ * @nolint
+ * @preventMunge
+ * @preserve-invariant-messages
+ */
+
+'use strict';
 
 if (__DEV__) {
   (function() {
@@ -115,17 +172,45 @@ ${source}
 
   /****************** FB_WWW_PROD ******************/
   [FB_WWW_PROD](source, globalName, filename, moduleType) {
-    return source;
+    return `/**
+${license}
+ *
+ * @noflow
+ * @nolint
+ * @preventMunge
+ * @preserve-invariant-messages
+ */
+
+${source}`;
   },
 
   /****************** FB_WWW_PROFILING ******************/
   [FB_WWW_PROFILING](source, globalName, filename, moduleType) {
-    return source;
+    return `/**
+${license}
+ *
+ * @noflow
+ * @nolint
+ * @preventMunge
+ * @preserve-invariant-messages
+ */
+
+${source}`;
   },
 
   /****************** RN_OSS_DEV ******************/
   [RN_OSS_DEV](source, globalName, filename, moduleType) {
-    return `'use strict';
+    return `/**
+${license}
+ *
+ * @noflow
+ * @nolint
+ * @providesModule ${globalName}-dev
+ * @preventMunge
+ * ${'@gen' + 'erated'}
+ */
+
+'use strict';
 
 if (__DEV__) {
   (function() {
@@ -136,17 +221,46 @@ ${source}
 
   /****************** RN_OSS_PROD ******************/
   [RN_OSS_PROD](source, globalName, filename, moduleType) {
-    return source;
+    return `/**
+${license}
+ *
+ * @noflow
+ * @nolint
+ * @providesModule ${globalName}-prod
+ * @preventMunge
+ * ${'@gen' + 'erated'}
+ */
+
+${source}`;
   },
 
   /****************** RN_OSS_PROFILING ******************/
   [RN_OSS_PROFILING](source, globalName, filename, moduleType) {
-    return source;
+    return `/**
+${license}
+ *
+ * @noflow
+ * @nolint
+ * @providesModule ${globalName}-profiling
+ * @preventMunge
+ * ${'@gen' + 'erated'}
+ */
+
+${source}`;
   },
 
   /****************** RN_FB_DEV ******************/
   [RN_FB_DEV](source, globalName, filename, moduleType) {
-    return `'use strict';
+    return `/**
+${license}
+ *
+ * @noflow
+ * @nolint
+ * @preventMunge
+ * ${'@gen' + 'erated'}
+ */
+
+'use strict';
 
 if (__DEV__) {
   (function() {
@@ -157,318 +271,86 @@ ${source}
 
   /****************** RN_FB_PROD ******************/
   [RN_FB_PROD](source, globalName, filename, moduleType) {
-    return source;
+    return `/**
+${license}
+ *
+ * @noflow
+ * @nolint
+ * @preventMunge
+ * ${'@gen' + 'erated'}
+ */
+
+${source}`;
   },
 
   /****************** RN_FB_PROFILING ******************/
   [RN_FB_PROFILING](source, globalName, filename, moduleType) {
-    return source;
+    return `/**
+${license}
+ *
+ * @noflow
+ * @nolint
+ * @preventMunge
+ * ${'@gen' + 'erated'}
+ */
+
+${source}`;
   },
 };
 
 const reconcilerWrappers = {
   /***************** NODE_DEV (reconciler only) *****************/
   [NODE_DEV](source, globalName, filename, moduleType) {
-    return `'use strict';
+    return `/**
+ * @license React
+ * ${filename}
+ *
+${license}
+ */
+
+'use strict';
 
 if (process.env.NODE_ENV !== "production") {
-  module.exports = function $$$reconciler($$$config) {
+  module.exports = function $$$reconciler($$$hostConfig) {
     var exports = {};
 ${source}
     return exports;
   };
-  module.exports.default = module.exports;
-  Object.defineProperty(module.exports, "__esModule", { value: true });
-}
-`;
+}`;
   },
 
   /***************** NODE_PROD (reconciler only) *****************/
   [NODE_PROD](source, globalName, filename, moduleType) {
-    return `module.exports = function $$$reconciler($$$config) {
-
+    return `/**
+ * @license React
+ * ${filename}
+ *
+${license}
+ */
+module.exports = function $$$reconciler($$$hostConfig) {
     var exports = {};
 ${source}
     return exports;
-};
-module.exports.default = module.exports;
-Object.defineProperty(module.exports, "__esModule", { value: true });
-`;
+};`;
   },
 
   /***************** NODE_PROFILING (reconciler only) *****************/
   [NODE_PROFILING](source, globalName, filename, moduleType) {
-    return `module.exports = function $$$reconciler($$$config) {
+    return `/**
+ * @license React
+ * ${filename}
+ *
+${license}
+ */
+module.exports = function $$$reconciler($$$hostConfig) {
     var exports = {};
 ${source}
     return exports;
-};
-module.exports.default = module.exports;
-Object.defineProperty(module.exports, "__esModule", { value: true });
-`;
-  },
-
-  /***************** FB_WWW_DEV (reconciler only) *****************/
-  [FB_WWW_DEV](source, globalName, filename, moduleType) {
-    return `'use strict';
-
-if (__DEV__) {
-  module.exports = function $$$reconciler($$$config) {
-    var exports = {};
-${source}
-    return exports;
-  };
-  module.exports.default = module.exports;
-  Object.defineProperty(module.exports, "__esModule", { value: true });
-}
-`;
-  },
-
-  /***************** FB_WWW_PROD (reconciler only) *****************/
-  [FB_WWW_PROD](source, globalName, filename, moduleType) {
-    return `module.exports = function $$$reconciler($$$config) {
-
-      var exports = {};
-  ${source}
-      return exports;
-  };
-  module.exports.default = module.exports;
-  Object.defineProperty(module.exports, "__esModule", { value: true });
-  `;
-  },
-
-  /***************** FB_WWW_PROFILING (reconciler only) *****************/
-  [FB_WWW_PROFILING](source, globalName, filename, moduleType) {
-    return `module.exports = function $$$reconciler($$$config) {
-      var exports = {};
-  ${source}
-      return exports;
-  };
-  module.exports.default = module.exports;
-  Object.defineProperty(module.exports, "__esModule", { value: true });
-  `;
+};`;
   },
 };
 
-const licenseHeaderWrappers = {
-  /***************** NODE_ES2015 *****************/
-  [NODE_ES2015](source, globalName, filename, moduleType) {
-    return `/**
- * @license React
- * ${filename}
- *
-${license}
- */
-
-${source}`;
-  },
-
-  /***************** ESM_DEV *****************/
-  [ESM_DEV](source, globalName, filename, moduleType) {
-    return `/**
-* @license React
- * ${filename}
- *
-${license}
- */
-
-${source}`;
-  },
-
-  /***************** ESM_PROD *****************/
-  [ESM_PROD](source, globalName, filename, moduleType) {
-    return `/**
-* @license React
- * ${filename}
- *
-${license}
- */
-
-${source}`;
-  },
-
-  /***************** BUN_DEV *****************/
-  [BUN_DEV](source, globalName, filename, moduleType) {
-    return `/**
-* @license React
- * ${filename}
- *
-${license}
- */
-
-${source}`;
-  },
-
-  /***************** BUN_PROD *****************/
-  [BUN_PROD](source, globalName, filename, moduleType) {
-    return `/**
- * @license React
- * ${filename}
- *
-${license}
- */
-
-${source}`;
-  },
-
-  /***************** NODE_DEV *****************/
-  [NODE_DEV](source, globalName, filename, moduleType) {
-    return `/**
- * @license React
- * ${filename}
- *
-${license}
- */
-
-${source}`;
-  },
-
-  /***************** NODE_PROD *****************/
-  [NODE_PROD](source, globalName, filename, moduleType) {
-    return `/**
- * @license React
- * ${filename}
- *
-${license}
- */
-
-${source}`;
-  },
-
-  /***************** NODE_PROFILING *****************/
-  [NODE_PROFILING](source, globalName, filename, moduleType) {
-    return `/**
- * @license React
- * ${filename}
- *
-${license}
- */
-
-${source}`;
-  },
-
-  /****************** FB_WWW_DEV ******************/
-  [FB_WWW_DEV](source, globalName, filename, moduleType) {
-    return `/**
-${license}
- *
- * @noflow
- * @nolint
- * @preventMunge
- * @preserve-invariant-messages
- */
-
-${source}`;
-  },
-
-  /****************** FB_WWW_PROD ******************/
-  [FB_WWW_PROD](source, globalName, filename, moduleType) {
-    return `/**
-${license}
- *
- * @noflow
- * @nolint
- * @preventMunge
- * @preserve-invariant-messages
- */
-
-${source}`;
-  },
-
-  /****************** FB_WWW_PROFILING ******************/
-  [FB_WWW_PROFILING](source, globalName, filename, moduleType) {
-    return `/**
-${license}
- *
- * @noflow
- * @nolint
- * @preventMunge
- * @preserve-invariant-messages
- */
-
-${source}`;
-  },
-
-  /****************** RN_OSS_DEV ******************/
-  [RN_OSS_DEV](source, globalName, filename, moduleType) {
-    return `/**
-${license}
- *
- * @noflow
- * @nolint
- * @preventMunge
- */
-
-${source}`;
-  },
-
-  /****************** RN_OSS_PROD ******************/
-  [RN_OSS_PROD](source, globalName, filename, moduleType) {
-    return `/**
-${license}
- *
- * @noflow
- * @nolint
- * @preventMunge
- */
-
-${source}`;
-  },
-
-  /****************** RN_OSS_PROFILING ******************/
-  [RN_OSS_PROFILING](source, globalName, filename, moduleType) {
-    return `/**
-${license}
- *
- * @noflow
- * @nolint
- * @preventMunge
- */
-
-${source}`;
-  },
-
-  /****************** RN_FB_DEV ******************/
-  [RN_FB_DEV](source, globalName, filename, moduleType) {
-    return `/**
-${license}
- *
- * @noflow
- * @nolint
- * @preventMunge
- */
-
-${source}`;
-  },
-
-  /****************** RN_FB_PROD ******************/
-  [RN_FB_PROD](source, globalName, filename, moduleType) {
-    return `/**
-${license}
- *
- * @noflow
- * @nolint
- * @preventMunge
- */
-
-${source}`;
-  },
-
-  /****************** RN_FB_PROFILING ******************/
-  [RN_FB_PROFILING](source, globalName, filename, moduleType) {
-    return `/**
-${license}
- *
- * @noflow
- * @nolint
- * @preventMunge
- */
-
-${source}`;
-  },
-};
-
-function wrapWithTopLevelDefinitions(
+function wrapBundle(
   source,
   bundleType,
   globalName,
@@ -493,15 +375,13 @@ function wrapWithTopLevelDefinitions(
 
         // Certain DEV and Profiling bundles should self-register their own module boundaries with DevTools.
         // This allows the Timeline to de-emphasize (dim) internal stack frames.
-        source = wrapWithRegisterInternalModule(source);
+        source = `
+          ${registerInternalModuleStart(globalName)}
+          ${source}
+          ${registerInternalModuleStop(globalName)}
+        `;
         break;
     }
-  }
-
-  if (bundleType === BROWSER_SCRIPT) {
-    // Bundles of type BROWSER_SCRIPT get sent straight to the browser without
-    // additional processing. So we should exclude any extra wrapper comments.
-    return source;
   }
 
   if (moduleType === RECONCILER) {
@@ -513,42 +393,16 @@ function wrapWithTopLevelDefinitions(
         `Unsupported build type for the reconciler package: ${bundleType}.`
       );
     }
-
     return wrapper(source, globalName, filename, moduleType);
   }
-
   // All the other packages.
-  const wrapper = topLevelDefinitionWrappers[bundleType];
+  const wrapper = wrappers[bundleType];
   if (typeof wrapper !== 'function') {
     throw new Error(`Unsupported build type: ${bundleType}.`);
   }
-
-  return wrapper(source, globalName, filename, moduleType);
-}
-
-function wrapWithLicenseHeader(
-  source,
-  bundleType,
-  globalName,
-  filename,
-  moduleType
-) {
-  if (bundleType === BROWSER_SCRIPT) {
-    // Bundles of type BROWSER_SCRIPT get sent straight to the browser without
-    // additional processing. So we should exclude any extra wrapper comments.
-    return source;
-  }
-
-  // All the other packages.
-  const wrapper = licenseHeaderWrappers[bundleType];
-  if (typeof wrapper !== 'function') {
-    throw new Error(`Unsupported build type: ${bundleType}.`);
-  }
-
   return wrapper(source, globalName, filename, moduleType);
 }
 
 module.exports = {
-  wrapWithTopLevelDefinitions,
-  wrapWithLicenseHeader,
+  wrapBundle,
 };

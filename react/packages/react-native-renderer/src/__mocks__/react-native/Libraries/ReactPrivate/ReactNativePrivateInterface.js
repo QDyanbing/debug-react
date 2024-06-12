@@ -1,14 +1,11 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
  * @flow strict-local
  */
-
-export opaque type PublicInstance = mixed;
-export opaque type PublicTextInstance = mixed;
 
 module.exports = {
   get BatchedBridge() {
@@ -47,16 +44,7 @@ module.exports = {
   get RawEventEmitter() {
     return require('./RawEventEmitter').default;
   },
-  get getNativeTagFromPublicInstance() {
-    return require('./getNativeTagFromPublicInstance').default;
-  },
-  get getNodeFromPublicInstance() {
-    return require('./getNodeFromPublicInstance').default;
-  },
-  get createPublicInstance() {
-    return require('./createPublicInstance').default;
-  },
-  get createPublicTextInstance() {
-    return require('./createPublicTextInstance').default;
+  get CustomEvent() {
+    return require('./CustomEvent').default;
   },
 };

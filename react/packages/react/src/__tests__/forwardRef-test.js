@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -10,20 +10,20 @@
 'use strict';
 
 describe('forwardRef', () => {
+  let PropTypes;
   let React;
   let ReactNoop;
-  let waitForAll;
+  let Scheduler;
 
   beforeEach(() => {
     jest.resetModules();
+    PropTypes = require('prop-types');
     React = require('react');
     ReactNoop = require('react-noop-renderer');
-
-    const InternalTestUtils = require('internal-test-utils');
-    waitForAll = InternalTestUtils.waitForAll;
+    Scheduler = require('scheduler');
   });
 
-  it('should update refs when switching between children', async () => {
+  it('should update refs when switching between children', () => {
     function FunctionComponent({forwardedRef, setRefOnDiv}) {
       return (
         <section>
@@ -40,25 +40,25 @@ describe('forwardRef', () => {
     const ref = React.createRef();
 
     ReactNoop.render(<RefForwardingComponent ref={ref} setRefOnDiv={true} />);
-    await waitForAll([]);
+    expect(Scheduler).toFlushWithoutYielding();
     expect(ref.current.type).toBe('div');
 
     ReactNoop.render(<RefForwardingComponent ref={ref} setRefOnDiv={false} />);
-    await waitForAll([]);
+    expect(Scheduler).toFlushWithoutYielding();
     expect(ref.current.type).toBe('span');
   });
 
-  it('should support rendering null', async () => {
+  it('should support rendering null', () => {
     const RefForwardingComponent = React.forwardRef((props, ref) => null);
 
     const ref = React.createRef();
 
     ReactNoop.render(<RefForwardingComponent ref={ref} />);
-    await waitForAll([]);
+    expect(Scheduler).toFlushWithoutYielding();
     expect(ref.current).toBe(null);
   });
 
-  it('should support rendering null for multiple children', async () => {
+  it('should support rendering null for multiple children', () => {
     const RefForwardingComponent = React.forwardRef((props, ref) => null);
 
     const ref = React.createRef();
@@ -70,12 +70,11 @@ describe('forwardRef', () => {
         <div />
       </div>,
     );
-    await waitForAll([]);
+    expect(Scheduler).toFlushWithoutYielding();
     expect(ref.current).toBe(null);
   });
 
-  // @gate !disableDefaultPropsExceptForClasses
-  it('should support defaultProps', async () => {
+  it('should support propTypes and defaultProps', () => {
     function FunctionComponent({forwardedRef, optional, required}) {
       return (
         <div ref={forwardedRef}>
@@ -85,11 +84,16 @@ describe('forwardRef', () => {
       );
     }
 
-    const RefForwardingComponent = React.forwardRef(
-      function NamedFunction(props, ref) {
-        return <FunctionComponent {...props} forwardedRef={ref} />;
-      },
-    );
+    const RefForwardingComponent = React.forwardRef(function NamedFunction(
+      props,
+      ref,
+    ) {
+      return <FunctionComponent {...props} forwardedRef={ref} />;
+    });
+    RefForwardingComponent.propTypes = {
+      optional: PropTypes.string,
+      required: PropTypes.string.isRequired,
+    };
     RefForwardingComponent.defaultProps = {
       optional: 'default',
     };
@@ -99,22 +103,32 @@ describe('forwardRef', () => {
     ReactNoop.render(
       <RefForwardingComponent ref={ref} optional="foo" required="bar" />,
     );
-    await waitForAll([]);
+    expect(Scheduler).toFlushWithoutYielding();
     expect(ref.current.children).toEqual([
       {text: 'foo', hidden: false},
       {text: 'bar', hidden: false},
     ]);
 
     ReactNoop.render(<RefForwardingComponent ref={ref} required="foo" />);
-    await waitForAll([]);
+    expect(Scheduler).toFlushWithoutYielding();
     expect(ref.current.children).toEqual([
       {text: 'default', hidden: false},
       {text: 'foo', hidden: false},
     ]);
+
+    expect(() =>
+      ReactNoop.render(<RefForwardingComponent ref={ref} optional="foo" />),
+    ).toErrorDev(
+      'Warning: Failed prop type: The prop `required` is marked as required in ' +
+        '`ForwardRef(NamedFunction)`, but its value is `undefined`.\n' +
+        '    in NamedFunction (at **)',
+    );
   });
 
   it('should warn if not provided a callback during creation', () => {
-    expect(() => React.forwardRef(undefined)).toErrorDev(
+    expect(() =>
+      React.forwardRef(undefined),
+    ).toErrorDev(
       'forwardRef requires a render function but was given undefined.',
       {withoutStack: true},
     );
@@ -124,27 +138,45 @@ describe('forwardRef', () => {
         withoutStack: true,
       },
     );
-    expect(() => React.forwardRef('foo')).toErrorDev(
+    expect(() =>
+      React.forwardRef('foo'),
+    ).toErrorDev(
       'forwardRef requires a render function but was given string.',
       {withoutStack: true},
     );
   });
 
   it('should warn if no render function is provided', () => {
-    expect(React.forwardRef).toErrorDev(
+    expect(
+      React.forwardRef,
+    ).toErrorDev(
       'forwardRef requires a render function but was given undefined.',
       {withoutStack: true},
     );
   });
 
-  it('should warn if the render function provided has defaultProps attributes', () => {
+  it('should warn if the render function provided has propTypes or defaultProps attributes', () => {
+    function renderWithPropTypes(props, ref) {
+      return null;
+    }
+    renderWithPropTypes.propTypes = {};
+
     function renderWithDefaultProps(props, ref) {
       return null;
     }
     renderWithDefaultProps.defaultProps = {};
 
-    expect(() => React.forwardRef(renderWithDefaultProps)).toErrorDev(
-      'forwardRef render functions do not support defaultProps. ' +
+    expect(() =>
+      React.forwardRef(renderWithPropTypes),
+    ).toErrorDev(
+      'forwardRef render functions do not support propTypes or defaultProps. ' +
+        'Did you accidentally pass a React component?',
+      {withoutStack: true},
+    );
+    expect(() =>
+      React.forwardRef(renderWithDefaultProps),
+    ).toErrorDev(
+      'forwardRef render functions do not support propTypes or defaultProps. ' +
         'Did you accidentally pass a React component?',
       {withoutStack: true},
     );
@@ -159,7 +191,9 @@ describe('forwardRef', () => {
   it('should warn if the render function provided does not use the forwarded ref parameter', () => {
     const arityOfOne = props => <div {...props} />;
 
-    expect(() => React.forwardRef(arityOfOne)).toErrorDev(
+    expect(() =>
+      React.forwardRef(arityOfOne),
+    ).toErrorDev(
       'forwardRef render functions accept exactly two parameters: props and ref. ' +
         'Did you forget to use the ref parameter?',
       {withoutStack: true},
@@ -174,124 +208,157 @@ describe('forwardRef', () => {
   it('should warn if the render function provided expects to use more than two parameters', () => {
     const arityOfThree = (props, ref, x) => <div {...props} ref={ref} x={x} />;
 
-    expect(() => React.forwardRef(arityOfThree)).toErrorDev(
+    expect(() =>
+      React.forwardRef(arityOfThree),
+    ).toErrorDev(
       'forwardRef render functions accept exactly two parameters: props and ref. ' +
         'Any additional parameter will be undefined.',
       {withoutStack: true},
     );
   });
 
-  it('should skip forwardRef in the stack if neither displayName nor name are present', async () => {
-    const RefForwardingComponent = React.forwardRef(function (props, ref) {
-      return [<span />];
-    });
-    ReactNoop.render(
-      <p>
-        <RefForwardingComponent />
-      </p>,
-    );
-    await expect(async () => {
-      await waitForAll([]);
-    }).toErrorDev(
-      'Each child in a list should have a unique "key" prop.' +
-        '\n\nCheck the top-level render call using <ForwardRef>. It was passed a child from ForwardRef. ' +
-        'See https://react.dev/link/warning-keys for more information.\n' +
-        '    in span (at **)\n' +
-        '    in ',
+  it('should fall back to showing something meaningful if no displayName or name are present', () => {
+    const Component = props => <div {...props} />;
+
+    const RefForwardingComponent = React.forwardRef((props, ref) => (
+      <Component {...props} forwardedRef={ref} />
+    ));
+
+    RefForwardingComponent.propTypes = {
+      optional: PropTypes.string,
+      required: PropTypes.string.isRequired,
+    };
+
+    RefForwardingComponent.defaultProps = {
+      optional: 'default',
+    };
+
+    const ref = React.createRef();
+
+    expect(() =>
+      ReactNoop.render(<RefForwardingComponent ref={ref} optional="foo" />),
+    ).toErrorDev(
+      'Warning: Failed prop type: The prop `required` is marked as required in ' +
+        '`ForwardRef`, but its value is `undefined`.',
+      // There's no component stack in this warning because the inner function is anonymous.
+      // If we wanted to support this (for the Error frames / source location)
+      // we could do this by updating ReactComponentStackFrame.
+      {withoutStack: true},
     );
   });
 
-  it('should use the inner function name for the stack', async () => {
+  it('should honor a displayName if set on the forwardRef wrapper in warnings', () => {
+    const Component = props => <div {...props} />;
+
     const RefForwardingComponent = React.forwardRef(function Inner(props, ref) {
-      return [<span />];
+      <Component {...props} forwardedRef={ref} />;
     });
-    ReactNoop.render(
-      <p>
-        <RefForwardingComponent />
-      </p>,
-    );
-    await expect(async () => {
-      await waitForAll([]);
-    }).toErrorDev(
-      'Each child in a list should have a unique "key" prop.' +
-        '\n\nCheck the top-level render call using <ForwardRef(Inner)>. It was passed a child from ForwardRef(Inner). ' +
-        'See https://react.dev/link/warning-keys for more information.\n' +
-        '    in span (at **)\n' +
-        '    in Inner (at **)' +
-        (gate(flags => flags.enableOwnerStacks) ? '' : '\n    in p (at **)'),
-    );
-  });
+    RefForwardingComponent.displayName = 'Custom';
 
-  it('should use the inner name in the stack', async () => {
-    const fn = (props, ref) => {
-      return [<span />];
+    RefForwardingComponent.propTypes = {
+      optional: PropTypes.string,
+      required: PropTypes.string.isRequired,
     };
-    Object.defineProperty(fn, 'name', {value: 'Inner'});
-    const RefForwardingComponent = React.forwardRef(fn);
-    ReactNoop.render(
-      <p>
-        <RefForwardingComponent />
-      </p>,
-    );
-    await expect(async () => {
-      await waitForAll([]);
-    }).toErrorDev(
-      'Each child in a list should have a unique "key" prop.' +
-        '\n\nCheck the top-level render call using <ForwardRef(Inner)>. It was passed a child from ForwardRef(Inner). ' +
-        'See https://react.dev/link/warning-keys for more information.\n' +
-        '    in span (at **)\n' +
-        '    in Inner (at **)' +
-        (gate(flags => flags.enableOwnerStacks) ? '' : '\n    in p (at **)'),
-    );
-  });
 
-  it('can use the outer displayName in the stack', async () => {
-    const RefForwardingComponent = React.forwardRef((props, ref) => {
-      return [<span />];
-    });
-    RefForwardingComponent.displayName = 'Outer';
-    ReactNoop.render(
-      <p>
-        <RefForwardingComponent />
-      </p>,
-    );
-    await expect(async () => {
-      await waitForAll([]);
-    }).toErrorDev(
-      'Each child in a list should have a unique "key" prop.' +
-        '\n\nCheck the top-level render call using <Outer>. It was passed a child from Outer. ' +
-        'See https://react.dev/link/warning-keys for more information.\n' +
-        '    in span (at **)\n' +
-        '    in Outer (at **)' +
-        (gate(flags => flags.enableOwnerStacks) ? '' : '\n    in p (at **)'),
-    );
-  });
-
-  it('should prefer the inner name to the outer displayName in the stack', async () => {
-    const fn = (props, ref) => {
-      return [<span />];
+    RefForwardingComponent.defaultProps = {
+      optional: 'default',
     };
-    Object.defineProperty(fn, 'name', {value: 'Inner'});
-    const RefForwardingComponent = React.forwardRef(fn);
-    RefForwardingComponent.displayName = 'Outer';
-    ReactNoop.render(
-      <p>
-        <RefForwardingComponent />
-      </p>,
-    );
-    await expect(async () => {
-      await waitForAll([]);
-    }).toErrorDev(
-      'Each child in a list should have a unique "key" prop.' +
-        '\n\nCheck the top-level render call using <Outer>. It was passed a child from Outer. ' +
-        'See https://react.dev/link/warning-keys for more information.\n' +
-        '    in span (at **)\n' +
-        '    in Inner (at **)' +
-        (gate(flags => flags.enableOwnerStacks) ? '' : '\n    in p (at **)'),
+
+    const ref = React.createRef();
+
+    expect(() =>
+      ReactNoop.render(<RefForwardingComponent ref={ref} optional="foo" />),
+    ).toErrorDev(
+      'Warning: Failed prop type: The prop `required` is marked as required in ' +
+        '`Custom`, but its value is `undefined`.\n' +
+        '    in Inner (at **)',
     );
   });
 
-  it('should not bailout if forwardRef is not wrapped in memo', async () => {
+  it('should pass displayName to an anonymous inner component so it shows up in component stacks', () => {
+    const Component = props => <div {...props} />;
+
+    const RefForwardingComponent = React.forwardRef((props, ref) => (
+      <Component {...props} forwardedRef={ref} />
+    ));
+    RefForwardingComponent.displayName = 'Custom';
+
+    RefForwardingComponent.propTypes = {
+      optional: PropTypes.string,
+      required: PropTypes.string.isRequired,
+    };
+
+    RefForwardingComponent.defaultProps = {
+      optional: 'default',
+    };
+
+    const ref = React.createRef();
+
+    expect(() =>
+      ReactNoop.render(<RefForwardingComponent ref={ref} optional="foo" />),
+    ).toErrorDev(
+      'Warning: Failed prop type: The prop `required` is marked as required in ' +
+        '`Custom`, but its value is `undefined`.\n' +
+        '    in Custom (at **)',
+    );
+  });
+
+  it('should honor a displayName in stacks if set on the inner function', () => {
+    const Component = props => <div {...props} />;
+
+    const inner = (props, ref) => <Component {...props} forwardedRef={ref} />;
+    inner.displayName = 'Inner';
+    const RefForwardingComponent = React.forwardRef(inner);
+
+    RefForwardingComponent.propTypes = {
+      optional: PropTypes.string,
+      required: PropTypes.string.isRequired,
+    };
+
+    RefForwardingComponent.defaultProps = {
+      optional: 'default',
+    };
+
+    const ref = React.createRef();
+
+    expect(() =>
+      ReactNoop.render(<RefForwardingComponent ref={ref} optional="foo" />),
+    ).toErrorDev(
+      'Warning: Failed prop type: The prop `required` is marked as required in ' +
+        '`ForwardRef(Inner)`, but its value is `undefined`.\n' +
+        '    in Inner (at **)',
+    );
+  });
+
+  it('should honor a outer displayName when wrapped component and memo component set displayName at the same time.', () => {
+    const Component = props => <div {...props} />;
+
+    const inner = (props, ref) => <Component {...props} forwardedRef={ref} />;
+    inner.displayName = 'Inner';
+    const RefForwardingComponent = React.forwardRef(inner);
+    RefForwardingComponent.displayName = 'Outer';
+
+    RefForwardingComponent.propTypes = {
+      optional: PropTypes.string,
+      required: PropTypes.string.isRequired,
+    };
+
+    RefForwardingComponent.defaultProps = {
+      optional: 'default',
+    };
+
+    const ref = React.createRef();
+
+    expect(() =>
+      ReactNoop.render(<RefForwardingComponent ref={ref} optional="foo" />),
+    ).toErrorDev(
+      'Warning: Failed prop type: The prop `required` is marked as required in ' +
+        '`Outer`, but its value is `undefined`.\n' +
+        '    in Inner (at **)',
+    );
+  });
+
+  it('should not bailout if forwardRef is not wrapped in memo', () => {
     const Component = props => <div {...props} />;
 
     let renderCount = 0;
@@ -304,15 +371,15 @@ describe('forwardRef', () => {
     const ref = React.createRef();
 
     ReactNoop.render(<RefForwardingComponent ref={ref} optional="foo" />);
-    await waitForAll([]);
+    expect(Scheduler).toFlushWithoutYielding();
     expect(renderCount).toBe(1);
 
     ReactNoop.render(<RefForwardingComponent ref={ref} optional="foo" />);
-    await waitForAll([]);
+    expect(Scheduler).toFlushWithoutYielding();
     expect(renderCount).toBe(2);
   });
 
-  it('should bailout if forwardRef is wrapped in memo', async () => {
+  it('should bailout if forwardRef is wrapped in memo', () => {
     const Component = props => <div ref={props.forwardedRef} />;
 
     let renderCount = 0;
@@ -327,13 +394,13 @@ describe('forwardRef', () => {
     const ref = React.createRef();
 
     ReactNoop.render(<RefForwardingComponent ref={ref} optional="foo" />);
-    await waitForAll([]);
+    expect(Scheduler).toFlushWithoutYielding();
     expect(renderCount).toBe(1);
 
     expect(ref.current.type).toBe('div');
 
     ReactNoop.render(<RefForwardingComponent ref={ref} optional="foo" />);
-    await waitForAll([]);
+    expect(Scheduler).toFlushWithoutYielding();
     expect(renderCount).toBe(1);
 
     const differentRef = React.createRef();
@@ -341,18 +408,18 @@ describe('forwardRef', () => {
     ReactNoop.render(
       <RefForwardingComponent ref={differentRef} optional="foo" />,
     );
-    await waitForAll([]);
+    expect(Scheduler).toFlushWithoutYielding();
     expect(renderCount).toBe(2);
 
     expect(ref.current).toBe(null);
     expect(differentRef.current.type).toBe('div');
 
     ReactNoop.render(<RefForwardingComponent ref={ref} optional="bar" />);
-    await waitForAll([]);
+    expect(Scheduler).toFlushWithoutYielding();
     expect(renderCount).toBe(3);
   });
 
-  it('should custom memo comparisons to compose', async () => {
+  it('should custom memo comparisons to compose', () => {
     const Component = props => <div ref={props.forwardedRef} />;
 
     let renderCount = 0;
@@ -368,19 +435,19 @@ describe('forwardRef', () => {
     const ref = React.createRef();
 
     ReactNoop.render(<RefForwardingComponent ref={ref} a="0" b="0" c="1" />);
-    await waitForAll([]);
+    expect(Scheduler).toFlushWithoutYielding();
     expect(renderCount).toBe(1);
 
     expect(ref.current.type).toBe('div');
 
     // Changing either a or b rerenders
     ReactNoop.render(<RefForwardingComponent ref={ref} a="0" b="1" c="1" />);
-    await waitForAll([]);
+    expect(Scheduler).toFlushWithoutYielding();
     expect(renderCount).toBe(2);
 
     // Changing c doesn't rerender
     ReactNoop.render(<RefForwardingComponent ref={ref} a="0" b="1" c="2" />);
-    await waitForAll([]);
+    expect(Scheduler).toFlushWithoutYielding();
     expect(renderCount).toBe(2);
 
     const ComposedMemo = React.memo(
@@ -389,29 +456,29 @@ describe('forwardRef', () => {
     );
 
     ReactNoop.render(<ComposedMemo ref={ref} a="0" b="0" c="0" />);
-    await waitForAll([]);
+    expect(Scheduler).toFlushWithoutYielding();
     expect(renderCount).toBe(3);
 
     // Changing just b no longer updates
     ReactNoop.render(<ComposedMemo ref={ref} a="0" b="1" c="0" />);
-    await waitForAll([]);
+    expect(Scheduler).toFlushWithoutYielding();
     expect(renderCount).toBe(3);
 
     // Changing just a and c updates
     ReactNoop.render(<ComposedMemo ref={ref} a="2" b="2" c="2" />);
-    await waitForAll([]);
+    expect(Scheduler).toFlushWithoutYielding();
     expect(renderCount).toBe(4);
 
     // Changing just c does not update
     ReactNoop.render(<ComposedMemo ref={ref} a="2" b="2" c="3" />);
-    await waitForAll([]);
+    expect(Scheduler).toFlushWithoutYielding();
     expect(renderCount).toBe(4);
 
     // Changing ref still rerenders
     const differentRef = React.createRef();
 
     ReactNoop.render(<ComposedMemo ref={differentRef} a="2" b="2" c="3" />);
-    await waitForAll([]);
+    expect(Scheduler).toFlushWithoutYielding();
     expect(renderCount).toBe(5);
 
     expect(ref.current).toBe(null);
@@ -427,7 +494,7 @@ describe('forwardRef', () => {
       );
     }).toErrorDev(
       [
-        'forwardRef requires a render function but received a `memo` ' +
+        'Warning: forwardRef requires a render function but received a `memo` ' +
           'component. Instead of forwardRef(memo(...)), use ' +
           'memo(forwardRef(...)).',
       ],

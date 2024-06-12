@@ -1,11 +1,10 @@
 /**
- * Copyright (c) Meta Platforms, Inc. and affiliates.
+ * Copyright (c) Facebook, Inc. and its affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
  * @emails react-core
- * @jest-environment ./scripts/jest/ReactDOMServerIntegrationEnvironment
  */
 
 'use strict';
@@ -15,34 +14,39 @@ const ReactFeatureFlags = require('shared/ReactFeatureFlags');
 
 let React;
 let ReactDOM;
-let ReactDOMClient;
+let ReactTestUtils;
 let ReactDOMServer;
 
 function initModules() {
   // Reset warning cache.
-  jest.resetModules();
+  jest.resetModuleRegistry();
   React = require('react');
   ReactDOM = require('react-dom');
-  ReactDOMClient = require('react-dom/client');
   ReactDOMServer = require('react-dom/server');
+  ReactTestUtils = require('react-dom/test-utils');
 
   // Make them available to the helpers.
   return {
-    ReactDOMClient,
+    ReactDOM,
     ReactDOMServer,
+    ReactTestUtils,
   };
 }
 
-const {resetModules, itRenders, clientCleanRender} =
-  ReactDOMServerIntegrationUtils(initModules);
+const {
+  resetModules,
+  itRenders,
+  clientCleanRender,
+  clientRenderOnServerString,
+} = ReactDOMServerIntegrationUtils(initModules);
 
 describe('ReactDOMServerIntegration', () => {
   beforeEach(() => {
     resetModules();
   });
 
-  describe('property to attribute mapping', function () {
-    describe('string properties', function () {
+  describe('property to attribute mapping', function() {
+    describe('string properties', function() {
       itRenders('simple numbers', async render => {
         const e = await render(<div width={30} />);
         expect(e.getAttribute('width')).toBe('30');
@@ -51,38 +55,6 @@ describe('ReactDOMServerIntegration', () => {
       itRenders('simple strings', async render => {
         const e = await render(<div width={'30'} />);
         expect(e.getAttribute('width')).toBe('30');
-      });
-
-      itRenders('empty src on img', async render => {
-        const e = await render(
-          <img src="" />,
-          ReactFeatureFlags.enableFilterEmptyStringAttributesDOM ? 1 : 0,
-        );
-        expect(e.getAttribute('src')).toBe(
-          ReactFeatureFlags.enableFilterEmptyStringAttributesDOM ? null : '',
-        );
-      });
-
-      itRenders('empty href on anchor', async render => {
-        const e = await render(<a href="" />);
-        expect(e.getAttribute('href')).toBe('');
-      });
-
-      itRenders('empty href on other tags', async render => {
-        const e = await render(
-          // <link href="" /> would be more sensible.
-          // However, that results in a hydration warning as well.
-          // Our test helpers do not support different error counts for initial
-          // server render and hydration.
-          // The number of errors on the server need to be equal to the number of
-          // errors during hydration.
-          // So we use a <div> instead.
-          <div href="" />,
-          ReactFeatureFlags.enableFilterEmptyStringAttributesDOM ? 1 : 0,
-        );
-        expect(e.getAttribute('href')).toBe(
-          ReactFeatureFlags.enableFilterEmptyStringAttributesDOM ? null : '',
-        );
       });
 
       itRenders('no string prop with true value', async render => {
@@ -101,7 +73,7 @@ describe('ReactDOMServerIntegration', () => {
       });
 
       itRenders('no string prop with function value', async render => {
-        const e = await render(<div width={function () {}} />, 1);
+        const e = await render(<div width={function() {}} />, 1);
         expect(e.hasAttribute('width')).toBe(false);
       });
 
@@ -111,7 +83,7 @@ describe('ReactDOMServerIntegration', () => {
       });
     });
 
-    describe('boolean properties', function () {
+    describe('boolean properties', function() {
       itRenders('boolean prop with true value', async render => {
         const e = await render(<div hidden={true} />);
         expect(e.getAttribute('hidden')).toBe('');
@@ -171,7 +143,7 @@ describe('ReactDOMServerIntegration', () => {
       });
 
       itRenders('no boolean prop with function value', async render => {
-        const e = await render(<div hidden={function () {}} />, 1);
+        const e = await render(<div hidden={function() {}} />, 1);
         expect(e.hasAttribute('hidden')).toBe(false);
       });
 
@@ -181,7 +153,7 @@ describe('ReactDOMServerIntegration', () => {
       });
     });
 
-    describe('download property (combined boolean/string attribute)', function () {
+    describe('download property (combined boolean/string attribute)', function() {
       itRenders('download prop with true value', async render => {
         const e = await render(<a download={true} />);
         expect(e.getAttribute('download')).toBe('');
@@ -223,7 +195,7 @@ describe('ReactDOMServerIntegration', () => {
       });
 
       itRenders('no download prop with function value', async render => {
-        const e = await render(<div download={function () {}} />, 1);
+        const e = await render(<div download={function() {}} />, 1);
         expect(e.hasAttribute('download')).toBe(false);
       });
 
@@ -233,7 +205,7 @@ describe('ReactDOMServerIntegration', () => {
       });
     });
 
-    describe('className property', function () {
+    describe('className property', function() {
       itRenders('className prop with string value', async render => {
         const e = await render(<div className="myClassName" />);
         expect(e.getAttribute('class')).toBe('myClassName');
@@ -282,7 +254,7 @@ describe('ReactDOMServerIntegration', () => {
       );
     });
 
-    describe('htmlFor property', function () {
+    describe('htmlFor property', function() {
       itRenders('htmlFor with string value', async render => {
         const e = await render(<div htmlFor="myFor" />);
         expect(e.getAttribute('for')).toBe('myFor');
@@ -315,7 +287,7 @@ describe('ReactDOMServerIntegration', () => {
       });
     });
 
-    describe('numeric properties', function () {
+    describe('numeric properties', function() {
       itRenders(
         'positive numeric property with positive value',
         async render => {
@@ -338,7 +310,7 @@ describe('ReactDOMServerIntegration', () => {
       );
 
       itRenders('no numeric prop with function value', async render => {
-        const e = await render(<ol start={function () {}} />, 1);
+        const e = await render(<ol start={function() {}} />, 1);
         expect(e.hasAttribute('start')).toBe(false);
       });
 
@@ -350,7 +322,7 @@ describe('ReactDOMServerIntegration', () => {
       itRenders(
         'no positive numeric prop with function value',
         async render => {
-          const e = await render(<input size={function () {}} />, 1);
+          const e = await render(<input size={function() {}} />, 1);
           expect(e.hasAttribute('size')).toBe(false);
         },
       );
@@ -361,11 +333,11 @@ describe('ReactDOMServerIntegration', () => {
       });
     });
 
-    describe('props with special meaning in React', function () {
+    describe('props with special meaning in React', function() {
       itRenders('no ref attribute', async render => {
         class RefComponent extends React.Component {
           render() {
-            return <div ref={React.createRef()} />;
+            return <div ref="foo" />;
           }
         }
         const e = await render(<RefComponent />);
@@ -400,7 +372,7 @@ describe('ReactDOMServerIntegration', () => {
       });
     });
 
-    describe('inline styles', function () {
+    describe('inline styles', function() {
       itRenders('simple styles', async render => {
         const e = await render(<div style={{color: 'red', width: '30px'}} />);
         expect(e.style.color).toBe('red');
@@ -497,7 +469,7 @@ describe('ReactDOMServerIntegration', () => {
       });
     });
 
-    describe('aria attributes', function () {
+    describe('aria attributes', function() {
       itRenders('simple strings', async render => {
         const e = await render(<div aria-label="hello" />);
         expect(e.getAttribute('aria-label')).toBe('hello');
@@ -521,13 +493,13 @@ describe('ReactDOMServerIntegration', () => {
       });
     });
 
-    describe('cased attributes', function () {
+    describe('cased attributes', function() {
       itRenders(
         'badly cased aliased HTML attribute with a warning',
         async render => {
-          const e = await render(<form acceptcharset="utf-8" />, 1);
-          expect(e.hasAttribute('accept-charset')).toBe(false);
-          expect(e.getAttribute('acceptcharset')).toBe('utf-8');
+          const e = await render(<meta httpequiv="refresh" />, 1);
+          expect(e.hasAttribute('http-equiv')).toBe(false);
+          expect(e.getAttribute('httpequiv')).toBe('refresh');
         },
       );
 
@@ -579,7 +551,7 @@ describe('ReactDOMServerIntegration', () => {
       );
     });
 
-    describe('unknown attributes', function () {
+    describe('unknown attributes', function() {
       itRenders('unknown attributes', async render => {
         const e = await render(<div foo="bar" />);
         expect(e.getAttribute('foo')).toBe('bar');
@@ -637,12 +609,7 @@ describe('ReactDOMServerIntegration', () => {
         // DOM nodes on the client side. We force it to fire early
         // so that it gets deduplicated later, and doesn't fail the test.
         expect(() => {
-          ReactDOM.flushSync(() => {
-            const root = ReactDOMClient.createRoot(
-              document.createElement('div'),
-            );
-            root.render(<nonstandard />);
-          });
+          ReactDOM.render(<nonstandard />, document.createElement('div'));
         }).toErrorDev('The tag <nonstandard> is unrecognized in this browser.');
 
         const e = await render(<nonstandard foo="bar" />);
@@ -691,26 +658,22 @@ describe('ReactDOMServerIntegration', () => {
       expect(e.getAttribute('class')).toBe('test');
     });
 
-    itRenders('className for is elements', async render => {
-      const e = await render(<div is="custom-element" className="test" />, 0);
-      expect(e.getAttribute('className')).toBe(null);
-      expect(e.getAttribute('class')).toBe('test');
-    });
-
     itRenders('className for custom elements', async render => {
-      const e = await render(<custom-element className="test" />, 0);
-      expect(e.getAttribute('className')).toBe(null);
-      expect(e.getAttribute('class')).toBe('test');
-    });
-
-    itRenders('htmlFor property on is elements', async render => {
-      const e = await render(<div is="custom-element" htmlFor="test" />);
-      expect(e.getAttribute('htmlFor')).toBe(null);
-      expect(e.getAttribute('for')).toBe('test');
+      if (ReactFeatureFlags.enableCustomElementPropertySupport) {
+        const e = await render(
+          <div is="custom-element" className="test" />,
+          render === clientRenderOnServerString ? 1 : 0,
+        );
+        expect(e.getAttribute('className')).toBe(null);
+        expect(e.getAttribute('class')).toBe('test');
+      } else {
+        const e = await render(<div is="custom-element" className="test" />, 0);
+        expect(e.getAttribute('className')).toBe('test');
+      }
     });
 
     itRenders('htmlFor attribute on custom elements', async render => {
-      const e = await render(<custom-element htmlFor="test" />);
+      const e = await render(<div is="custom-element" htmlFor="test" />);
       expect(e.getAttribute('htmlFor')).toBe('test');
       expect(e.getAttribute('for')).toBe(null);
     });
@@ -733,35 +696,20 @@ describe('ReactDOMServerIntegration', () => {
 
     itRenders('unknown boolean `true` attributes as strings', async render => {
       const e = await render(<custom-element foo={true} />);
-      expect(e.getAttribute('foo')).toBe('');
+      if (ReactFeatureFlags.enableCustomElementPropertySupport) {
+        expect(e.getAttribute('foo')).toBe('');
+      } else {
+        expect(e.getAttribute('foo')).toBe('true');
+      }
     });
 
     itRenders('unknown boolean `false` attributes as strings', async render => {
       const e = await render(<custom-element foo={false} />);
-      expect(e.getAttribute('foo')).toBe(null);
-    });
-
-    itRenders('new boolean `true` attributes', async render => {
-      const element = await render(<div inert={true} />, 0);
-
-      expect(element.getAttribute('inert')).toBe('');
-    });
-
-    itRenders('new boolean `""` attributes', async render => {
-      const element = await render(
-        <div inert="" />,
-        // Warns since this used to render `inert=""` like `inert={true}`
-        // but now renders it like `inert={false}`.
-        1,
-      );
-
-      expect(element.getAttribute('inert')).toBe(null);
-    });
-
-    itRenders('new boolean `false` attributes', async render => {
-      const element = await render(<div inert={false} />, 0);
-
-      expect(element.getAttribute('inert')).toBe(null);
+      if (ReactFeatureFlags.enableCustomElementPropertySupport) {
+        expect(e.getAttribute('foo')).toBe(null);
+      } else {
+        expect(e.getAttribute('foo')).toBe('false');
+      }
     });
 
     itRenders(
