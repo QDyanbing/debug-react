@@ -81,3 +81,8 @@ export {
   useTransition,
   version,
 } from './src/React';
+
+// 在文件的最底部
+
+import * as React from './src/React';
+export default React;

@@ -54,3 +54,8 @@ export function hydrateRoot(
     }
   }
 }
+
+// 在文件的最底部
+
+const ReactDOM = {createRoot, hydrateRoot};
+export default ReactDOM;
