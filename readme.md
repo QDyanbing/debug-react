@@ -2,6 +2,6 @@
 
 ## demo 是一个 react 的 demo 项目
 
-## react 是 fork 出来的 react 源码
+## react 是 fork 出来的 react 源码 应该是 V19 版本的
 
 ## doc 文件夹中存储了看源码的理解和一些记录文档
