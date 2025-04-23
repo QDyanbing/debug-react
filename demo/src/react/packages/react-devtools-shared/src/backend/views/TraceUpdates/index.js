@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -11,7 +11,7 @@ import Agent from 'react-devtools-shared/src/backend/agent';
 import {destroy as destroyCanvas, draw} from './canvas';
 import {getNestedBoundingClientRect} from '../utils';
 
-import type {NativeType} from '../../types';
+import type {HostInstance} from '../../types';
 import type {Rect} from '../utils';
 
 // How long the rect should be shown for?
@@ -26,18 +26,19 @@ const REMEASUREMENT_AFTER_DURATION = 250;
 
 // Some environments (e.g. React Native / Hermes) don't support the performance API yet.
 const getCurrentTime =
+  // $FlowFixMe[method-unbinding]
   typeof performance === 'object' && typeof performance.now === 'function'
     ? () => performance.now()
     : () => Date.now();
 
-export type Data = {|
+export type Data = {
   count: number,
   expirationTime: number,
   lastMeasuredAt: number,
   rect: Rect | null,
-|};
+};
 
-const nodeToData: Map<NativeType, Data> = new Map();
+const nodeToData: Map<HostInstance, Data> = new Map();
 
 let agent: Agent = ((null: any): Agent);
 let drawAnimationFrameID: AnimationFrameID | null = null;
@@ -65,11 +66,11 @@ export function toggleEnabled(value: boolean): void {
       redrawTimeoutID = null;
     }
 
-    destroyCanvas();
+    destroyCanvas(agent);
   }
 }
 
-function traceUpdates(nodes: Set<NativeType>): void {
+function traceUpdates(nodes: Set<HostInstance>): void {
   if (!isEnabled) {
     return;
   }
@@ -125,7 +126,7 @@ function prepareToDraw(): void {
     }
   });
 
-  draw(nodeToData);
+  draw(nodeToData, agent);
 
   if (earliestExpiration !== Number.MAX_VALUE) {
     redrawTimeoutID = setTimeout(prepareToDraw, earliestExpiration - now);

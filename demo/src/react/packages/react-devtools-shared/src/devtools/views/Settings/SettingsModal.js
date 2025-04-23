@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -26,9 +26,11 @@ import ProfilerSettings from './ProfilerSettings';
 
 import styles from './SettingsModal.css';
 
-type TabID = 'general' | 'components' | 'profiler';
+import type Store from 'react-devtools-shared/src/devtools/store';
 
-export default function SettingsModal(_: {||}) {
+type TabID = 'general' | 'debugging' | 'components' | 'profiler';
+
+export default function SettingsModal(): React.Node {
   const {isModalShowing, setIsModalShowing} = useContext(SettingsModalContext);
   const store = useContext(StoreContext);
   const {profilerStore} = store;
@@ -37,7 +39,7 @@ export default function SettingsModal(_: {||}) {
   // Explicitly disallow it for now.
   const isProfilingSubscription = useMemo(
     () => ({
-      getCurrentValue: () => profilerStore.isProfiling,
+      getCurrentValue: () => profilerStore.isProfilingBasedOnUserInput,
       subscribe: (callback: Function) => {
         profilerStore.addListener('isProfiling', callback);
         return () => profilerStore.removeListener('isProfiling', callback);
@@ -54,14 +56,18 @@ export default function SettingsModal(_: {||}) {
     return null;
   }
 
-  return <SettingsModalImpl />;
+  return <SettingsModalImpl store={store} />;
 }
 
-function SettingsModalImpl(_: {||}) {
-  const {setIsModalShowing} = useContext(SettingsModalContext);
-  const dismissModal = useCallback(() => setIsModalShowing(false), [
-    setIsModalShowing,
-  ]);
+type ImplProps = {store: Store};
+
+function SettingsModalImpl({store}: ImplProps) {
+  const {setIsModalShowing, environmentNames, hookSettings} =
+    useContext(SettingsModalContext);
+  const dismissModal = useCallback(
+    () => setIsModalShowing(false),
+    [setIsModalShowing],
+  );
 
   const [selectedTabID, selectTab] = useLocalStorage<TabID>(
     'React::DevTools::selectedSettingsTabID',
@@ -80,10 +86,10 @@ function SettingsModalImpl(_: {||}) {
   let view = null;
   switch (selectedTabID) {
     case 'components':
-      view = <ComponentsSettings />;
+      view = <ComponentsSettings environmentNames={environmentNames} />;
       break;
     case 'debugging':
-      view = <DebuggingSettings />;
+      view = <DebuggingSettings hookSettings={hookSettings} store={store} />;
       break;
     case 'general':
       view = <GeneralSettings />;

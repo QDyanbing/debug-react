@@ -1,21 +1,19 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  *
- * @format
- * @flow
  */
 
 'use strict';
 
-type Options = {|+unsafelyIgnoreFunctions?: boolean|};
+type Options = {+unsafelyIgnoreFunctions?: boolean};
 
 /*
  * @returns {bool} true if different, false if equal
  */
-const deepDiffer = function(
+function deepDiffer(
   one: any,
   two: any,
   maxDepthOrOptions: Options | number = -1,
@@ -79,6 +77,6 @@ const deepDiffer = function(
     }
   }
   return false;
-};
+}
 
 module.exports = deepDiffer;

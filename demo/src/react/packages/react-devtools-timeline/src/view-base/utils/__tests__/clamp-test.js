@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -9,7 +9,7 @@
 
 import {clamp} from '../clamp';
 
-describe(clamp, () => {
+describe('clamp', () => {
   it('should return min if value < min', () => {
     expect(clamp(0, 1, -1)).toBe(0);
     expect(clamp(0.1, 1.1, 0.05)).toBe(0.1);

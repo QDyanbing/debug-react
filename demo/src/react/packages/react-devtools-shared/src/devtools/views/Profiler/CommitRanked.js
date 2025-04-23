@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -18,7 +18,7 @@ import HoveredFiberInfo from './HoveredFiberInfo';
 import {scale} from './utils';
 import {StoreContext} from '../context';
 import {SettingsContext} from '../Settings/SettingsContext';
-import {useHighlightNativeElement} from '../hooks';
+import {useHighlightHostInstance} from '../hooks';
 import Tooltip from './Tooltip';
 
 import styles from './CommitRanked.css';
@@ -27,7 +27,7 @@ import type {TooltipFiberData} from './HoveredFiberInfo';
 import type {ChartData} from './RankedChartBuilder';
 import type {CommitTree} from './types';
 
-export type ItemData = {|
+export type ItemData = {
   chartData: ChartData,
   onElementMouseEnter: (fiberData: TooltipFiberData) => void,
   onElementMouseLeave: () => void,
@@ -36,17 +36,16 @@ export type ItemData = {|
   selectedFiberIndex: number,
   selectFiber: (id: number | null, name: string | null) => void,
   width: number,
-|};
+};
 
-export default function CommitRankedAutoSizer(_: {||}) {
+export default function CommitRankedAutoSizer(_: {}): React.Node {
   const {profilerStore} = useContext(StoreContext);
-  const {rootID, selectedCommitIndex, selectFiber} = useContext(
-    ProfilerContext,
-  );
+  const {rootID, selectedCommitIndex, selectFiber} =
+    useContext(ProfilerContext);
   const {profilingCache} = profilerStore;
 
   const deselectCurrentFiber = useCallback(
-    event => {
+    (event: $FlowFixMe) => {
       event.stopPropagation();
       selectFiber(null, null);
     },
@@ -88,24 +87,20 @@ export default function CommitRankedAutoSizer(_: {||}) {
   }
 }
 
-type Props = {|
+type Props = {
   chartData: ChartData,
   commitTree: CommitTree,
   height: number,
   width: number,
-|};
+};
 
 function CommitRanked({chartData, commitTree, height, width}: Props) {
-  const [
-    hoveredFiberData,
-    setHoveredFiberData,
-  ] = useState<TooltipFiberData | null>(null);
+  const [hoveredFiberData, setHoveredFiberData] =
+    useState<TooltipFiberData | null>(null);
   const {lineHeight} = useContext(SettingsContext);
   const {selectedFiberID, selectFiber} = useContext(ProfilerContext);
-  const {
-    highlightNativeElement,
-    clearHighlightNativeElement,
-  } = useHighlightNativeElement();
+  const {highlightHostInstance, clearHighlightHostInstance} =
+    useHighlightHostInstance();
 
   const selectedFiberIndex = useMemo(
     () => getNodeIndex(chartData, selectedFiberID),
@@ -113,17 +108,17 @@ function CommitRanked({chartData, commitTree, height, width}: Props) {
   );
 
   const handleElementMouseEnter = useCallback(
-    ({id, name}) => {
-      highlightNativeElement(id); // Highlight last hovered element.
+    ({id, name}: $FlowFixMe) => {
+      highlightHostInstance(id); // Highlight last hovered element.
       setHoveredFiberData({id, name}); // Set hovered fiber data for tooltip
     },
-    [highlightNativeElement],
+    [highlightHostInstance],
   );
 
   const handleElementMouseLeave = useCallback(() => {
-    clearHighlightNativeElement(); // clear highlighting of element on mouse leave
+    clearHighlightHostInstance(); // clear highlighting of element on mouse leave
     setHoveredFiberData(null); // clear hovered fiber data for tooltip
-  }, [clearHighlightNativeElement]);
+  }, [clearHighlightHostInstance]);
 
   const itemData = useMemo<ItemData>(
     () => ({

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -16,6 +16,7 @@ let React;
 let ReactDOM;
 let ReactDOMServer;
 let Scheduler;
+let assertLog;
 
 // This tests the userspace shim of `useSyncExternalStore` in a server-rendering
 // (Node) environment
@@ -31,9 +32,7 @@ describe('useSyncExternalStore (userspace shim, server rendering)', () => {
     // React 17.
     jest.mock('react', () => {
       const {
-        // eslint-disable-next-line no-unused-vars
         startTransition: _,
-        // eslint-disable-next-line no-unused-vars
         useSyncExternalStore: __,
         ...otherExports
       } = jest.requireActual('react');
@@ -45,12 +44,15 @@ describe('useSyncExternalStore (userspace shim, server rendering)', () => {
     ReactDOMServer = require('react-dom/server');
     Scheduler = require('scheduler');
 
-    useSyncExternalStore = require('use-sync-external-store/shim')
-      .useSyncExternalStore;
+    const InternalTestUtils = require('internal-test-utils');
+    assertLog = InternalTestUtils.assertLog;
+
+    useSyncExternalStore =
+      require('use-sync-external-store/shim').useSyncExternalStore;
   });
 
   function Text({text}) {
-    Scheduler.unstable_yieldValue(text);
+    Scheduler.log(text);
     return text;
   }
 
@@ -77,7 +79,7 @@ describe('useSyncExternalStore (userspace shim, server rendering)', () => {
     };
   }
 
-  test('basic server render', async () => {
+  it('basic server render', async () => {
     const store = createExternalStore('client');
 
     function App() {
@@ -92,7 +94,7 @@ describe('useSyncExternalStore (userspace shim, server rendering)', () => {
     const html = ReactDOMServer.renderToString(<App />);
 
     // We don't call getServerSnapshot in the shim
-    expect(Scheduler).toHaveYielded(['client']);
+    assertLog(['client']);
     expect(html).toEqual('client');
   });
 });

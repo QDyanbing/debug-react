@@ -17,13 +17,13 @@ const {
 
 const {
   NODE_ES2015,
-  NODE_ESM,
-  UMD_DEV,
-  UMD_PROD,
-  UMD_PROFILING,
+  ESM_DEV,
+  ESM_PROD,
   NODE_DEV,
   NODE_PROD,
   NODE_PROFILING,
+  BUN_DEV,
+  BUN_PROD,
   FB_WWW_DEV,
   FB_WWW_PROD,
   FB_WWW_PROFILING,
@@ -33,6 +33,7 @@ const {
   RN_FB_DEV,
   RN_FB_PROD,
   RN_FB_PROFILING,
+  BROWSER_SCRIPT,
 } = Bundles.bundleTypes;
 
 function getPackageName(name) {
@@ -42,20 +43,20 @@ function getPackageName(name) {
   return name;
 }
 
-function getBundleOutputPath(bundleType, filename, packageName) {
+function getBundleOutputPath(bundle, bundleType, filename, packageName) {
   switch (bundleType) {
     case NODE_ES2015:
       return `build/node_modules/${packageName}/cjs/${filename}`;
-    case NODE_ESM:
+    case ESM_DEV:
+    case ESM_PROD:
       return `build/node_modules/${packageName}/esm/${filename}`;
+    case BUN_DEV:
+    case BUN_PROD:
+      return `build/node_modules/${packageName}/cjs/${filename}`;
     case NODE_DEV:
     case NODE_PROD:
     case NODE_PROFILING:
       return `build/node_modules/${packageName}/cjs/${filename}`;
-    case UMD_DEV:
-    case UMD_PROD:
-    case UMD_PROFILING:
-      return `build/node_modules/${packageName}/umd/${filename}`;
     case FB_WWW_DEV:
     case FB_WWW_PROD:
     case FB_WWW_PROFILING:
@@ -75,6 +76,7 @@ function getBundleOutputPath(bundleType, filename, packageName) {
       switch (packageName) {
         case 'scheduler':
         case 'react':
+        case 'react-dom':
         case 'react-is':
         case 'react-test-renderer':
           return `build/facebook-react-native/${packageName}/cjs/${filename}`;
@@ -83,11 +85,26 @@ function getBundleOutputPath(bundleType, filename, packageName) {
             /\.js$/,
             '.fb.js'
           )}`;
-        case 'react-server-native-relay':
-          return `build/facebook-relay/flight/${filename}`;
         default:
           throw new Error('Unknown RN package.');
       }
+    case BROWSER_SCRIPT: {
+      // Bundles that are served as browser scripts need to be able to be sent
+      // straight to the browser with any additional bundling. We shouldn't use
+      // a module to re-export. Depending on how they are served, they also may
+      // not go through package.json module resolution, so we shouldn't rely on
+      // that either. We should consider the output path as part of the public
+      // contract, and explicitly specify its location within the package's
+      // directory structure.
+      const outputPath = bundle.outputPath;
+      if (!outputPath) {
+        throw new Error(
+          'Bundles with type BROWSER_SCRIPT must specific an explicit ' +
+            'output path.'
+        );
+      }
+      return `build/node_modules/${packageName}/${outputPath}`;
+    }
     default:
       throw new Error('Unknown bundle type.');
   }
@@ -127,7 +144,7 @@ function getTarOptions(tgzName, packageName) {
       entries: [CONTENTS_FOLDER],
       map(header) {
         if (header.name.indexOf(CONTENTS_FOLDER + '/') === 0) {
-          header.name = header.name.substring(CONTENTS_FOLDER.length + 1);
+          header.name = header.name.slice(CONTENTS_FOLDER.length + 1);
         }
       },
     },
@@ -153,6 +170,7 @@ function filterOutEntrypoints(name) {
   let packageJSON = JSON.parse(readFileSync(jsonPath));
   let files = packageJSON.files;
   let exportsJSON = packageJSON.exports;
+  let browserJSON = packageJSON.browser;
   if (!Array.isArray(files)) {
     throw new Error('expected all package.json files to contain a files field');
   }
@@ -169,6 +187,18 @@ function filterOutEntrypoints(name) {
       hasBundle =
         entryPointsToHasBundle.get(entry + '.node') ||
         entryPointsToHasBundle.get(entry + '.browser');
+
+      // The .react-server and .rsc suffixes may not have a bundle representation but
+      // should infer their bundle status from the non-suffixed entry point.
+      if (entry.endsWith('.react-server')) {
+        hasBundle = entryPointsToHasBundle.get(
+          entry.slice(0, '.react-server'.length * -1)
+        );
+      } else if (entry.endsWith('.rsc')) {
+        hasBundle = entryPointsToHasBundle.get(
+          entry.slice(0, '.rsc'.length * -1)
+        );
+      }
     }
     if (hasBundle === undefined) {
       // This doesn't exist in the bundles. It's an extra file.
@@ -179,7 +209,14 @@ function filterOutEntrypoints(name) {
       // Let's remove it.
       files.splice(i, 1);
       i--;
-      unlinkSync(`build/node_modules/${name}/${filename}`);
+      try {
+        unlinkSync(`build/node_modules/${name}/${filename}`);
+      } catch (err) {
+        // If the file doesn't exist we can just move on. Otherwise throw the halt the build
+        if (err.code !== 'ENOENT') {
+          throw err;
+        }
+      }
       changed = true;
       // Remove it from the exports field too if it exists.
       if (exportsJSON) {
@@ -188,6 +225,9 @@ function filterOutEntrypoints(name) {
         } else {
           delete exportsJSON['./' + filename.replace(/\.js$/, '')];
         }
+      }
+      if (browserJSON) {
+        delete browserJSON['./' + filename];
       }
     }
 

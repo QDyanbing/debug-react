@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -8,25 +8,23 @@
  */
 
 import * as React from 'react';
-import {useContext} from 'react';
-import {RegistryContext} from './Contexts';
 
 import styles from './ContextMenuItem.css';
 
-import type {RegistryContextType} from './Contexts';
-
-type Props = {|
-  children: React$Node,
+type Props = {
+  children: React.Node,
   onClick: () => void,
-  title: string,
-|};
+  hide: () => void,
+};
 
-export default function ContextMenuItem({children, onClick, title}: Props) {
-  const {hideMenu} = useContext<RegistryContextType>(RegistryContext);
-
-  const handleClick = event => {
+export default function ContextMenuItem({
+  children,
+  onClick,
+  hide,
+}: Props): React.Node {
+  const handleClick = () => {
     onClick();
-    hideMenu();
+    hide();
   };
 
   return (

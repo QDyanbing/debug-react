@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,16 +7,15 @@
  * @flow
  */
 
-import type {ElementRef} from 'react';
 import type {
-  HostComponent,
+  HostInstance,
   MeasureInWindowOnSuccessCallback,
   MeasureLayoutOnSuccessCallback,
   MeasureOnSuccessCallback,
-  NativeMethods,
+  INativeMethods,
   ViewConfig,
 } from './ReactNativeTypes';
-import type {Instance} from './ReactNativeHostConfig';
+import type {Instance} from './ReactFiberConfigNative';
 
 // Modules provided by RN:
 import {
@@ -30,7 +29,7 @@ import {
   warnForStyleProps,
 } from './NativeMethodsMixinUtils';
 
-class ReactNativeFiberHostComponent {
+class ReactNativeFiberHostComponent implements INativeMethods {
   _children: Array<Instance | number>;
   _nativeTag: number;
   _internalFiberInstanceHandleDEV: Object;
@@ -72,7 +71,7 @@ class ReactNativeFiberHostComponent {
   }
 
   measureLayout(
-    relativeToNativeNode: number | ElementRef<HostComponent<mixed>>,
+    relativeToNativeNode: number | HostInstance,
     onSuccess: MeasureLayoutOnSuccessCallback,
     onFail?: () => void /* currently unused */,
   ) {
@@ -82,7 +81,8 @@ class ReactNativeFiberHostComponent {
       // Already a node handle
       relativeNode = relativeToNativeNode;
     } else {
-      const nativeNode: ReactNativeFiberHostComponent = (relativeToNativeNode: any);
+      const nativeNode: ReactNativeFiberHostComponent =
+        (relativeToNativeNode: any);
       if (nativeNode._nativeTag) {
         relativeNode = nativeNode._nativeTag;
       }
@@ -91,7 +91,7 @@ class ReactNativeFiberHostComponent {
     if (relativeNode == null) {
       if (__DEV__) {
         console.error(
-          'Warning: ref.measureLayout must be called with a node handle or a ref to a native component.',
+          'ref.measureLayout must be called with a node handle or a ref to a native component.',
         );
       }
 
@@ -125,8 +125,5 @@ class ReactNativeFiberHostComponent {
     }
   }
 }
-
-// eslint-disable-next-line no-unused-expressions
-(ReactNativeFiberHostComponent.prototype: $ReadOnly<{...NativeMethods, ...}>);
 
 export default ReactNativeFiberHostComponent;

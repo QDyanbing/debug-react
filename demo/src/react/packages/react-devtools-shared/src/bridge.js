@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -9,22 +9,21 @@
 
 import EventEmitter from './events';
 
-import type {ComponentFilter, Wall} from './types';
+import type {ComponentFilter, Wall} from './frontend/types';
 import type {
   InspectedElementPayload,
   OwnersList,
   ProfilingDataBackend,
   RendererID,
+  DevToolsHookSettings,
+  ProfilingSettings,
 } from 'react-devtools-shared/src/backend/types';
 import type {StyleAndLayout as StyleAndLayoutPayload} from 'react-devtools-shared/src/backend/NativeStyleEditor/types';
-import type {BrowserTheme} from 'react-devtools-shared/src/devtools/views/DevTools';
-
-const BATCH_DURATION = 100;
 
 // This message specifies the version of the DevTools protocol currently supported by the backend,
 // as well as the earliest NPM version (e.g. "4.13.0") that protocol is supported by on the frontend.
 // This enables an older frontend to display an upgrade message to users for a newer, unsupported backend.
-export type BridgeProtocol = {|
+export type BridgeProtocol = {
   // Version supported by the current frontend/backend.
   version: number,
 
@@ -32,7 +31,7 @@ export type BridgeProtocol = {|
   // Note that 'maxNpmVersion' is only set when the version is bumped.
   minNpmVersion: string,
   maxNpmVersion: string | null,
-|};
+};
 
 // Bump protocol version whenever a backwards breaking change is made
 // in the messages sent between BackendBridge and FrontendBridge.
@@ -73,181 +72,177 @@ export const BRIDGE_PROTOCOL: Array<BridgeProtocol> = [
 export const currentBridgeProtocol: BridgeProtocol =
   BRIDGE_PROTOCOL[BRIDGE_PROTOCOL.length - 1];
 
-type ElementAndRendererID = {|id: number, rendererID: RendererID|};
+type ElementAndRendererID = {id: number, rendererID: RendererID};
 
-type Message = {|
+type Message = {
   event: string,
   payload: any,
-|};
+};
 
-type HighlightElementInDOM = {|
+type HighlightHostInstance = {
   ...ElementAndRendererID,
   displayName: string | null,
   hideAfterTimeout: boolean,
-  openNativeElementsPanel: boolean,
+  openBuiltinElementsPanel: boolean,
   scrollIntoView: boolean,
-|};
+};
 
-type OverrideValue = {|
+type OverrideValue = {
   ...ElementAndRendererID,
   path: Array<string | number>,
   wasForwarded?: boolean,
   value: any,
-|};
+};
 
-type OverrideHookState = {|
+type OverrideHookState = {
   ...OverrideValue,
   hookID: number,
-|};
+};
 
 type PathType = 'props' | 'hooks' | 'state' | 'context';
 
-type DeletePath = {|
+type DeletePath = {
   ...ElementAndRendererID,
   type: PathType,
   hookID?: ?number,
   path: Array<string | number>,
-|};
+};
 
-type RenamePath = {|
+type RenamePath = {
   ...ElementAndRendererID,
   type: PathType,
   hookID?: ?number,
   oldPath: Array<string | number>,
   newPath: Array<string | number>,
-|};
+};
 
-type OverrideValueAtPath = {|
+type OverrideValueAtPath = {
   ...ElementAndRendererID,
   type: PathType,
   hookID?: ?number,
   path: Array<string | number>,
   value: any,
-|};
+};
 
-type OverrideError = {|
+type OverrideError = {
   ...ElementAndRendererID,
   forceError: boolean,
-|};
+};
 
-type OverrideSuspense = {|
+type OverrideSuspense = {
   ...ElementAndRendererID,
   forceFallback: boolean,
-|};
+};
 
-type CopyElementPathParams = {|
+type CopyElementPathParams = {
   ...ElementAndRendererID,
   path: Array<string | number>,
-|};
+};
 
-type ViewAttributeSourceParams = {|
+type ViewAttributeSourceParams = {
   ...ElementAndRendererID,
   path: Array<string | number>,
-|};
+};
 
-type InspectElementParams = {|
+type InspectElementParams = {
   ...ElementAndRendererID,
   forceFullData: boolean,
   path: Array<number | string> | null,
   requestID: number,
-|};
+};
 
-type StoreAsGlobalParams = {|
+type StoreAsGlobalParams = {
   ...ElementAndRendererID,
   count: number,
   path: Array<string | number>,
-|};
+};
 
-type NativeStyleEditor_RenameAttributeParams = {|
+type NativeStyleEditor_RenameAttributeParams = {
   ...ElementAndRendererID,
   oldName: string,
   newName: string,
   value: string,
-|};
+};
 
-type NativeStyleEditor_SetValueParams = {|
+type NativeStyleEditor_SetValueParams = {
   ...ElementAndRendererID,
   name: string,
   value: string,
-|};
+};
 
-type UpdateConsolePatchSettingsParams = {|
-  appendComponentStack: boolean,
-  breakOnConsoleErrors: boolean,
-  showInlineWarningsAndErrors: boolean,
-  hideConsoleLogsInStrictMode: boolean,
-  browserTheme: BrowserTheme,
-|};
-
-type SavedPreferencesParams = {|
-  appendComponentStack: boolean,
-  breakOnConsoleErrors: boolean,
+type SavedPreferencesParams = {
   componentFilters: Array<ComponentFilter>,
-  showInlineWarningsAndErrors: boolean,
-  hideConsoleLogsInStrictMode: boolean,
-|};
+};
 
-export type BackendEvents = {|
+export type BackendEvents = {
+  backendInitialized: [],
   backendVersion: [string],
   bridgeProtocol: [BridgeProtocol],
   extensionBackendInitialized: [],
   fastRefreshScheduled: [],
   getSavedPreferences: [],
   inspectedElement: [InspectedElementPayload],
-  isBackendStorageAPISupported: [boolean],
-  isSynchronousXHRSupported: [boolean],
+  isReloadAndProfileSupportedByBackend: [boolean],
   operations: [Array<number>],
   ownersList: [OwnersList],
   overrideComponentFilters: [Array<ComponentFilter>],
+  environmentNames: [Array<string>],
   profilingData: [ProfilingDataBackend],
   profilingStatus: [boolean],
   reloadAppForProfiling: [],
-  selectFiber: [number],
+  saveToClipboard: [string],
+  selectElement: [number],
   shutdown: [],
-  stopInspectingNative: [boolean],
-  syncSelectionFromNativeElementsPanel: [],
-  syncSelectionToNativeElementsPanel: [],
-  unsupportedRendererVersion: [RendererID],
+  stopInspectingHost: [boolean],
+  syncSelectionFromBuiltinElementsPanel: [],
+  syncSelectionToBuiltinElementsPanel: [],
+  unsupportedRendererVersion: [],
 
   // React Native style editor plug-in.
   isNativeStyleEditorSupported: [
-    {|isSupported: boolean, validAttributes: ?$ReadOnlyArray<string>|},
+    {isSupported: boolean, validAttributes: ?$ReadOnlyArray<string>},
   ],
   NativeStyleEditor_styleAndLayout: [StyleAndLayoutPayload],
-|};
 
-type FrontendEvents = {|
-  clearErrorsAndWarnings: [{|rendererID: RendererID|}],
-  clearErrorsForFiberID: [ElementAndRendererID],
-  clearNativeElementHighlight: [],
-  clearWarningsForFiberID: [ElementAndRendererID],
+  hookSettings: [$ReadOnly<DevToolsHookSettings>],
+};
+
+type StartProfilingParams = ProfilingSettings;
+type ReloadAndProfilingParams = ProfilingSettings;
+
+type FrontendEvents = {
+  clearErrorsAndWarnings: [{rendererID: RendererID}],
+  clearErrorsForElementID: [ElementAndRendererID],
+  clearHostInstanceHighlight: [],
+  clearWarningsForElementID: [ElementAndRendererID],
   copyElementPath: [CopyElementPathParams],
   deletePath: [DeletePath],
   getBackendVersion: [],
   getBridgeProtocol: [],
+  getIfHasUnsupportedRendererVersion: [],
   getOwnersList: [ElementAndRendererID],
-  getProfilingData: [{|rendererID: RendererID|}],
+  getProfilingData: [{rendererID: RendererID}],
   getProfilingStatus: [],
-  highlightNativeElement: [HighlightElementInDOM],
+  highlightHostInstance: [HighlightHostInstance],
   inspectElement: [InspectElementParams],
   logElementToConsole: [ElementAndRendererID],
   overrideError: [OverrideError],
   overrideSuspense: [OverrideSuspense],
   overrideValueAtPath: [OverrideValueAtPath],
   profilingData: [ProfilingDataBackend],
-  reloadAndProfile: [boolean],
+  reloadAndProfile: [ReloadAndProfilingParams],
   renamePath: [RenamePath],
   savedPreferences: [SavedPreferencesParams],
-  selectFiber: [number],
   setTraceUpdatesEnabled: [boolean],
   shutdown: [],
-  startInspectingNative: [],
-  startProfiling: [boolean],
-  stopInspectingNative: [boolean],
+  startInspectingHost: [],
+  startProfiling: [StartProfilingParams],
+  stopInspectingHost: [boolean],
   stopProfiling: [],
   storeAsGlobal: [StoreAsGlobalParams],
   updateComponentFilters: [Array<ComponentFilter>],
-  updateConsolePatchSettings: [UpdateConsolePatchSettingsParams],
+  getEnvironmentNames: [],
+  updateHookSettings: [$ReadOnly<DevToolsHookSettings>],
   viewAttributeSource: [ViewAttributeSourceParams],
   viewElementSource: [ElementAndRendererID],
 
@@ -270,18 +265,23 @@ type FrontendEvents = {|
   overrideHookState: [OverrideHookState],
   overrideProps: [OverrideValue],
   overrideState: [OverrideValue],
-|};
+
+  resumeElementPolling: [],
+  pauseElementPolling: [],
+
+  getHookSettings: [],
+};
 
 class Bridge<
   OutgoingEvents: Object,
   IncomingEvents: Object,
-> extends EventEmitter<{|
+> extends EventEmitter<{
   ...IncomingEvents,
   ...OutgoingEvents,
-|}> {
+}> {
   _isShutdown: boolean = false;
   _messageQueue: Array<any> = [];
-  _timeoutID: TimeoutID | null = null;
+  _scheduledFlush: boolean = false;
   _wall: Wall;
   _wallUnlisten: Function | null = null;
 
@@ -329,8 +329,19 @@ class Bridge<
     //   (or we're waiting for our setTimeout-0 to fire), then _timeoutID will
     //   be set, and we'll simply add to the queue and wait for that
     this._messageQueue.push(event, payload);
-    if (!this._timeoutID) {
-      this._timeoutID = setTimeout(this._flush, 0);
+    if (!this._scheduledFlush) {
+      this._scheduledFlush = true;
+      // $FlowFixMe
+      if (typeof devtoolsJestTestScheduler === 'function') {
+        // This exists just for our own jest tests.
+        // They're written in such a way that we can neither mock queueMicrotask
+        // because then we break React DOM and we can't not mock it because then
+        // we can't synchronously flush it. So they need to be rewritten.
+        // $FlowFixMe
+        devtoolsJestTestScheduler(this._flush); // eslint-disable-line no-undef
+      } else {
+        queueMicrotask(this._flush);
+      }
     }
   }
 
@@ -341,16 +352,17 @@ class Bridge<
     }
 
     // Queue the shutdown outgoing message for subscribers.
+    this.emit('shutdown');
     this.send('shutdown');
 
     // Mark this bridge as destroyed, i.e. disable its public API.
     this._isShutdown = true;
 
     // Disable the API inherited from EventEmitter that can add more listeners and send more messages.
-    // $FlowFixMe This property is not writable.
-    this.addListener = function() {};
-    // $FlowFixMe This property is not writable.
-    this.emit = function() {};
+    // $FlowFixMe[cannot-write] This property is not writable.
+    this.addListener = function () {};
+    // $FlowFixMe[cannot-write] This property is not writable.
+    this.emit = function () {};
     // NOTE: There's also EventEmitter API like `on` and `prependListener` that we didn't add to our Flow type of EventEmitter.
 
     // Unsubscribe this bridge incoming message listeners to be sure, and so they don't have to do that.
@@ -367,40 +379,29 @@ class Bridge<
     do {
       this._flush();
     } while (this._messageQueue.length);
-
-    // Make sure once again that there is no dangling timer.
-    if (this._timeoutID !== null) {
-      clearTimeout(this._timeoutID);
-      this._timeoutID = null;
-    }
   }
 
-  _flush = () => {
+  _flush: () => void = () => {
     // This method is used after the bridge is marked as destroyed in shutdown sequence,
     // so we do not bail out if the bridge marked as destroyed.
     // It is a private method that the bridge ensures is only called at the right times.
-
-    if (this._timeoutID !== null) {
-      clearTimeout(this._timeoutID);
-      this._timeoutID = null;
-    }
-
-    if (this._messageQueue.length) {
-      for (let i = 0; i < this._messageQueue.length; i += 2) {
-        this._wall.send(this._messageQueue[i], ...this._messageQueue[i + 1]);
+    try {
+      if (this._messageQueue.length) {
+        for (let i = 0; i < this._messageQueue.length; i += 2) {
+          this._wall.send(this._messageQueue[i], ...this._messageQueue[i + 1]);
+        }
+        this._messageQueue.length = 0;
       }
-      this._messageQueue.length = 0;
-
-      // Check again for queued messages in BATCH_DURATION ms. This will keep
-      // flushing in a loop as long as messages continue to be added. Once no
-      // more are, the timer expires.
-      this._timeoutID = setTimeout(this._flush, BATCH_DURATION);
+    } finally {
+      // We set this at the end in case new messages are added synchronously above.
+      // They're already handled so they shouldn't queue more flushes.
+      this._scheduledFlush = false;
     }
   };
 
   // Temporarily support older standalone backends by forwarding "overrideValueAtPath" commands
   // to the older message types they may be listening to.
-  overrideValueAtPath = ({
+  overrideValueAtPath: OverrideValueAtPath => void = ({
     id,
     path,
     rendererID,

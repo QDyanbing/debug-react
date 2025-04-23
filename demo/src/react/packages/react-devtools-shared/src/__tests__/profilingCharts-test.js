@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -9,18 +9,17 @@
 
 import type Store from 'react-devtools-shared/src/devtools/store';
 
+import {getVersionedRenderImplementation} from './utils';
+
 describe('profiling charts', () => {
   let React;
   let Scheduler;
-  let legacyRender;
   let store: Store;
   let utils;
 
   beforeEach(() => {
     utils = require('./utils');
     utils.beforeEachProfiling();
-
-    legacyRender = utils.legacyRender;
 
     store = global.store;
     store.collapseNodesByDefault = false;
@@ -29,6 +28,8 @@ describe('profiling charts', () => {
     React = require('react');
     Scheduler = require('scheduler');
   });
+
+  const {render} = getVersionedRenderImplementation();
 
   function getFlamegraphChartData(rootID, commitIndex) {
     const commitTree = store.profilerStore.profilingCache.getCommitTree({
@@ -61,7 +62,7 @@ describe('profiling charts', () => {
   describe('flamegraph chart', () => {
     // @reactVersion >= 16.9
     it('should contain valid data', () => {
-      const Parent = (_: {||}) => {
+      const Parent = (_: {}) => {
         Scheduler.unstable_advanceTime(10);
         return (
           <React.Fragment>
@@ -78,11 +79,9 @@ describe('profiling charts', () => {
         return null;
       });
 
-      const container = document.createElement('div');
-
       utils.act(() => store.profilerStore.startProfiling());
 
-      utils.act(() => legacyRender(<Parent />, container));
+      utils.act(() => render(<Parent />));
       expect(store).toMatchInlineSnapshot(`
         [root]
           ▾ <Parent>
@@ -91,7 +90,7 @@ describe('profiling charts', () => {
               <Child key="third"> [Memo]
       `);
 
-      utils.act(() => legacyRender(<Parent />, container));
+      utils.act(() => render(<Parent />));
       expect(store).toMatchInlineSnapshot(`
         [root]
           ▾ <Parent>
@@ -107,9 +106,9 @@ describe('profiling charts', () => {
       const firstCommitData = getFlamegraphChartData(rootID, 0);
       expect(firstCommitData.commitTree.nodes.size).toBe(5);
       expect(firstCommitData.chartData.rows).toMatchInlineSnapshot(`
-        Array [
-          Array [
-            Object {
+        [
+          [
+            {
               "actualDuration": 15,
               "didRender": true,
               "id": 2,
@@ -120,32 +119,32 @@ describe('profiling charts', () => {
               "treeBaseDuration": 15,
             },
           ],
-          Array [
-            Object {
+          [
+            {
               "actualDuration": 0,
               "didRender": true,
               "id": 5,
-              "label": "Child key=\\"third\\" (<0.1ms of <0.1ms)",
+              "label": "Child (Memo) key="third" (<0.1ms of <0.1ms)",
               "name": "Child",
               "offset": 15,
               "selfDuration": 0,
               "treeBaseDuration": 0,
             },
-            Object {
+            {
               "actualDuration": 2,
               "didRender": true,
               "id": 4,
-              "label": "Child key=\\"second\\" (2ms of 2ms)",
+              "label": "Child (Memo) key="second" (2ms of 2ms)",
               "name": "Child",
               "offset": 13,
               "selfDuration": 2,
               "treeBaseDuration": 2,
             },
-            Object {
+            {
               "actualDuration": 3,
               "didRender": true,
               "id": 3,
-              "label": "Child key=\\"first\\" (3ms of 3ms)",
+              "label": "Child (Memo) key="first" (3ms of 3ms)",
               "name": "Child",
               "offset": 10,
               "selfDuration": 3,
@@ -158,9 +157,9 @@ describe('profiling charts', () => {
       const secondCommitData = getFlamegraphChartData(rootID, 1);
       expect(secondCommitData.commitTree.nodes.size).toBe(5);
       expect(secondCommitData.chartData.rows).toMatchInlineSnapshot(`
-        Array [
-          Array [
-            Object {
+        [
+          [
+            {
               "actualDuration": 10,
               "didRender": true,
               "id": 2,
@@ -171,32 +170,32 @@ describe('profiling charts', () => {
               "treeBaseDuration": 15,
             },
           ],
-          Array [
-            Object {
+          [
+            {
               "actualDuration": 0,
               "didRender": false,
               "id": 5,
-              "label": "Child key=\\"third\\"",
+              "label": "Child (Memo) key="third"",
               "name": "Child",
               "offset": 15,
               "selfDuration": 0,
               "treeBaseDuration": 0,
             },
-            Object {
+            {
               "actualDuration": 0,
               "didRender": false,
               "id": 4,
-              "label": "Child key=\\"second\\"",
+              "label": "Child (Memo) key="second"",
               "name": "Child",
               "offset": 13,
               "selfDuration": 0,
               "treeBaseDuration": 2,
             },
-            Object {
+            {
               "actualDuration": 0,
               "didRender": false,
               "id": 3,
-              "label": "Child key=\\"first\\"",
+              "label": "Child (Memo) key="first"",
               "name": "Child",
               "offset": 10,
               "selfDuration": 0,
@@ -211,7 +210,7 @@ describe('profiling charts', () => {
   describe('ranked chart', () => {
     // @reactVersion >= 16.9
     it('should contain valid data', () => {
-      const Parent = (_: {||}) => {
+      const Parent = (_: {}) => {
         Scheduler.unstable_advanceTime(10);
         return (
           <React.Fragment>
@@ -228,11 +227,9 @@ describe('profiling charts', () => {
         return null;
       });
 
-      const container = document.createElement('div');
-
       utils.act(() => store.profilerStore.startProfiling());
 
-      utils.act(() => legacyRender(<Parent />, container));
+      utils.act(() => render(<Parent />));
       expect(store).toMatchInlineSnapshot(`
         [root]
           ▾ <Parent>
@@ -241,7 +238,7 @@ describe('profiling charts', () => {
               <Child key="third"> [Memo]
       `);
 
-      utils.act(() => legacyRender(<Parent />, container));
+      utils.act(() => render(<Parent />));
       expect(store).toMatchInlineSnapshot(`
         [root]
           ▾ <Parent>
@@ -258,28 +255,28 @@ describe('profiling charts', () => {
       const firstCommitData = getRankedChartData(rootID, 0);
       expect(firstCommitData.commitTree.nodes.size).toBe(5);
       expect(firstCommitData.chartData.nodes).toMatchInlineSnapshot(`
-        Array [
-          Object {
+        [
+          {
             "id": 2,
             "label": "Parent (10ms)",
             "name": "Parent",
             "value": 10,
           },
-          Object {
+          {
             "id": 3,
-            "label": "Child (Memo) key=\\"first\\" (3ms)",
+            "label": "Child (Memo) key="first" (3ms)",
             "name": "Child",
             "value": 3,
           },
-          Object {
+          {
             "id": 4,
-            "label": "Child (Memo) key=\\"second\\" (2ms)",
+            "label": "Child (Memo) key="second" (2ms)",
             "name": "Child",
             "value": 2,
           },
-          Object {
+          {
             "id": 5,
-            "label": "Child (Memo) key=\\"third\\" (<0.1ms)",
+            "label": "Child (Memo) key="third" (<0.1ms)",
             "name": "Child",
             "value": 0,
           },
@@ -290,8 +287,8 @@ describe('profiling charts', () => {
       const secondCommitData = getRankedChartData(rootID, 1);
       expect(secondCommitData.commitTree.nodes.size).toBe(5);
       expect(secondCommitData.chartData.nodes).toMatchInlineSnapshot(`
-        Array [
-          Object {
+        [
+          {
             "id": 2,
             "label": "Parent (10ms)",
             "name": "Parent",

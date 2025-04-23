@@ -4,6 +4,6 @@
 
 ## react 源码放在 demo 的 src 下
 
-react https://github.com/facebook/react/tree/v18.2.0
+react https://github.com/facebook/react/tree/v19.0.0
 
 ## doc 文件夹中存储了看源码的理解和一些记录文档

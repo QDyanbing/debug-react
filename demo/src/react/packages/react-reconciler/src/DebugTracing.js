@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,7 +7,7 @@
  * @flow
  */
 
-import type {Lane, Lanes} from './ReactFiberLane.old';
+import type {Lane, Lanes} from './ReactFiberLane';
 import type {Wakeable} from 'shared/ReactTypes';
 
 import {enableDebugTracing} from 'shared/ReactFeatureFlags';
@@ -22,7 +22,7 @@ function formatLanes(laneOrLanes: Lane | Lanes): string {
   return '0b' + (laneOrLanes: any).toString(2).padStart(31, '0');
 }
 
-function group(...groupArgs): void {
+function group(...groupArgs: Array<string>): void {
   pendingGroupArgs.push(groupArgs);
 
   if (nativeConsoleLog === null) {
@@ -44,7 +44,7 @@ function groupEnd(): void {
   }
 }
 
-function log(...logArgs): void {
+function log(...logArgs: Array<mixed>): void {
   if (printedGroupIndex < pendingGroupArgs.length - 1) {
     for (let i = printedGroupIndex + 1; i < pendingGroupArgs.length; i++) {
       const groupArgs = pendingGroupArgs[i];
@@ -66,7 +66,7 @@ export function logCommitStarted(lanes: Lanes): void {
   if (__DEV__) {
     if (enableDebugTracing) {
       group(
-        `%c⚛️%c commit%c (${formatLanes(lanes)})`,
+        `%c⚛%c commit%c (${formatLanes(lanes)})`,
         REACT_LOGO_STYLE,
         '',
         'font-weight: normal;',
@@ -84,7 +84,7 @@ export function logCommitStopped(): void {
 }
 
 const PossiblyWeakMap = typeof WeakMap === 'function' ? WeakMap : Map;
-// $FlowFixMe: Flow cannot handle polymorphic WeakMaps
+// $FlowFixMe[incompatible-type]: Flow cannot handle polymorphic WeakMaps
 const wakeableIDs: WeakMap<Wakeable, number> = new PossiblyWeakMap();
 let wakeableID: number = 0;
 function getWakeableID(wakeable: Wakeable): number {
@@ -103,7 +103,7 @@ export function logComponentSuspended(
       const id = getWakeableID(wakeable);
       const display = (wakeable: any).displayName || wakeable;
       log(
-        `%c⚛️%c ${componentName} suspended`,
+        `%c⚛%c ${componentName} suspended`,
         REACT_LOGO_STYLE,
         'color: #80366d; font-weight: bold;',
         id,
@@ -112,7 +112,7 @@ export function logComponentSuspended(
       wakeable.then(
         () => {
           log(
-            `%c⚛️%c ${componentName} resolved`,
+            `%c⚛%c ${componentName} resolved`,
             REACT_LOGO_STYLE,
             'color: #80366d; font-weight: bold;',
             id,
@@ -121,7 +121,7 @@ export function logComponentSuspended(
         },
         () => {
           log(
-            `%c⚛️%c ${componentName} rejected`,
+            `%c⚛%c ${componentName} rejected`,
             REACT_LOGO_STYLE,
             'color: #80366d; font-weight: bold;',
             id,
@@ -137,7 +137,7 @@ export function logLayoutEffectsStarted(lanes: Lanes): void {
   if (__DEV__) {
     if (enableDebugTracing) {
       group(
-        `%c⚛️%c layout effects%c (${formatLanes(lanes)})`,
+        `%c⚛%c layout effects%c (${formatLanes(lanes)})`,
         REACT_LOGO_STYLE,
         '',
         'font-weight: normal;',
@@ -158,7 +158,7 @@ export function logPassiveEffectsStarted(lanes: Lanes): void {
   if (__DEV__) {
     if (enableDebugTracing) {
       group(
-        `%c⚛️%c passive effects%c (${formatLanes(lanes)})`,
+        `%c⚛%c passive effects%c (${formatLanes(lanes)})`,
         REACT_LOGO_STYLE,
         '',
         'font-weight: normal;',
@@ -179,7 +179,7 @@ export function logRenderStarted(lanes: Lanes): void {
   if (__DEV__) {
     if (enableDebugTracing) {
       group(
-        `%c⚛️%c render%c (${formatLanes(lanes)})`,
+        `%c⚛%c render%c (${formatLanes(lanes)})`,
         REACT_LOGO_STYLE,
         '',
         'font-weight: normal;',
@@ -203,7 +203,7 @@ export function logForceUpdateScheduled(
   if (__DEV__) {
     if (enableDebugTracing) {
       log(
-        `%c⚛️%c ${componentName} forced update %c(${formatLanes(lane)})`,
+        `%c⚛%c ${componentName} forced update %c(${formatLanes(lane)})`,
         REACT_LOGO_STYLE,
         'color: #db2e1f; font-weight: bold;',
         '',
@@ -220,7 +220,7 @@ export function logStateUpdateScheduled(
   if (__DEV__) {
     if (enableDebugTracing) {
       log(
-        `%c⚛️%c ${componentName} updated state %c(${formatLanes(lane)})`,
+        `%c⚛%c ${componentName} updated state %c(${formatLanes(lane)})`,
         REACT_LOGO_STYLE,
         'color: #01a252; font-weight: bold;',
         '',

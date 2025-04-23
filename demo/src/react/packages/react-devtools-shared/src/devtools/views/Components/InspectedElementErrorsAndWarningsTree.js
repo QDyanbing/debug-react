@@ -1,5 +1,5 @@
 /**
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -9,7 +9,6 @@
 
 import * as React from 'react';
 import {
-  useContext,
   unstable_useCacheRefresh as useCacheRefresh,
   useTransition,
 } from 'react';
@@ -18,32 +17,29 @@ import ButtonIcon from '../ButtonIcon';
 import Store from '../../store';
 import sharedStyles from './InspectedElementSharedStyles.css';
 import styles from './InspectedElementErrorsAndWarningsTree.css';
-import {SettingsContext} from '../Settings/SettingsContext';
 import {
   clearErrorsForElement as clearErrorsForElementAPI,
   clearWarningsForElement as clearWarningsForElementAPI,
 } from 'react-devtools-shared/src/backendAPI';
 
-import type {InspectedElement} from './types';
+import type {InspectedElement} from 'react-devtools-shared/src/frontend/types';
 import type {FrontendBridge} from 'react-devtools-shared/src/bridge';
 
-type Props = {|
+type Props = {
   bridge: FrontendBridge,
   inspectedElement: InspectedElement,
   store: Store,
-|};
+};
 
 export default function InspectedElementErrorsAndWarningsTree({
   bridge,
   inspectedElement,
   store,
-}: Props) {
+}: Props): React.Node {
   const refresh = useCacheRefresh();
 
-  const [
-    isErrorsTransitionPending,
-    startClearErrorsTransition,
-  ] = useTransition();
+  const [isErrorsTransitionPending, startClearErrorsTransition] =
+    useTransition();
   const clearErrorsForInspectedElement = () => {
     const {id} = inspectedElement;
     const rendererID = store.getRendererIDForElement(id);
@@ -59,10 +55,8 @@ export default function InspectedElementErrorsAndWarningsTree({
     }
   };
 
-  const [
-    isWarningsTransitionPending,
-    startClearWarningsTransition,
-  ] = useTransition();
+  const [isWarningsTransitionPending, startClearWarningsTransition] =
+    useTransition();
   const clearWarningsForInspectedElement = () => {
     const {id} = inspectedElement;
     const rendererID = store.getRendererIDForElement(id);
@@ -78,12 +72,14 @@ export default function InspectedElementErrorsAndWarningsTree({
     }
   };
 
-  const {showInlineWarningsAndErrors} = useContext(SettingsContext);
-  if (!showInlineWarningsAndErrors) {
+  if (!store.displayingErrorsAndWarningsEnabled) {
     return null;
   }
 
   const {errors, warnings} = inspectedElement;
+  if (errors.length === 0 && warnings.length === 0) {
+    return null;
+  }
 
   return (
     <React.Fragment>
@@ -115,16 +111,16 @@ export default function InspectedElementErrorsAndWarningsTree({
   );
 }
 
-type TreeProps = {|
+type TreeProps = {
   badgeClassName: string,
   actions: React$Node,
   className: string,
-  clearMessages: () => {},
+  clearMessages: () => void,
   entries: Array<[string, number]>,
   isTransitionPending: boolean,
   label: string,
   messageClassName: string,
-|};
+};
 
 function Tree({
   badgeClassName,
@@ -140,7 +136,7 @@ function Tree({
     return null;
   }
   return (
-    <div className={`${sharedStyles.InspectedElementTree} ${className}`}>
+    <div className={className}>
       <div className={`${sharedStyles.HeaderRow} ${styles.HeaderRow}`}>
         <div className={sharedStyles.Header}>{label}</div>
         <Button
@@ -163,12 +159,12 @@ function Tree({
   );
 }
 
-type ErrorOrWarningViewProps = {|
+type ErrorOrWarningViewProps = {
   badgeClassName: string,
   className: string,
   count: number,
   message: string,
-|};
+};
 
 function ErrorOrWarningView({
   className,
