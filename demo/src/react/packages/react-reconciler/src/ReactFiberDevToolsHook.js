@@ -40,7 +40,7 @@ import {
 import {setSuppressWarning} from 'shared/consoleWithStackDev';
 import {disableLogs, reenableLogs} from 'shared/ConsolePatchingDev';
 
-declare const __REACT_DEVTOOLS_GLOBAL_HOOK__: Object | void;
+declare var __REACT_DEVTOOLS_GLOBAL_HOOK__: Object | void;
 
 let rendererID = null;
 let injectedHook = null;
@@ -56,6 +56,7 @@ export function injectInternals(internals: Object): boolean {
     return false;
   }
   const hook = __REACT_DEVTOOLS_GLOBAL_HOOK__;
+
   if (hook.isDisabled) {
     // This isn't a real property on the hook, but it can be set to opt out
     // of DevTools integration and associated warnings and logs.

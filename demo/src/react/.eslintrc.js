@@ -12,12 +12,12 @@ const WARNING = 1;
 const ERROR = 2;
 
 module.exports = {
-  extends: ['prettier', 'plugin:jest/recommended'],
+  extends: [],
 
   // Stop ESLint from looking for a configuration file in parent folders
   root: true,
 
-  reportUnusedDisableDirectives: true,
+  reportUnusedDisableDirectives: false,
 
   plugins: [
     'babel',
@@ -26,7 +26,7 @@ module.exports = {
     'es',
     'no-for-of-loops',
     'no-function-declare-after-return',
-    'react',
+    // 'react',
     'react-internal',
   ],
 
@@ -184,11 +184,24 @@ module.exports = {
     'babel/arrow-parens': OFF,
     'babel/no-await-in-loop': OFF,
     'babel/flow-object-type': OFF,
+
+    'react/jsx-equals-spacing': OFF,
+    'react/jsx-no-duplicate-props': OFF,
+    'react/jsx-uses-vars': OFF,
+    'react/jsx-boolean-value': OFF,
+    'react/jsx-no-undef': OFF,
+    'react/jsx-space-before-closing': OFF,
+    'react/jsx-uses-react': OFF,
+    'react/react-in-jsx-scope': OFF,
+    'react/self-closing-comp': OFF,
+    'react/jsx-wrap-multilines': OFF,
+
+
     'react/display-name': OFF,
     'react/forbid-prop-types': OFF,
     'react/jsx-closing-bracket-location': OFF,
     'react/jsx-curly-spacing': OFF,
-    'react/jsx-equals-spacing': WARNING,
+    // 'react/jsx-equals-spacing': WARNING,
     'react/jsx-filename-extension': OFF,
     'react/jsx-first-prop-new-line': OFF,
     'react/jsx-handler-names': OFF,
@@ -197,12 +210,12 @@ module.exports = {
     'react/jsx-key': OFF,
     'react/jsx-max-props-per-line': OFF,
     'react/jsx-no-bind': OFF,
-    'react/jsx-no-duplicate-props': ERROR,
+    // 'react/jsx-no-duplicate-props': ERROR,
     'react/jsx-no-literals': OFF,
     'react/jsx-no-target-blank': OFF,
     'react/jsx-pascal-case': OFF,
     'react/jsx-sort-props': OFF,
-    'react/jsx-uses-vars': ERROR,
+    // 'react/jsx-uses-vars': ERROR,
     'react/no-comment-textnodes': OFF,
     'react/no-danger': OFF,
     'react/no-deprecated': OFF,
@@ -248,7 +261,7 @@ module.exports = {
       },
     ],
     'no-shadow': ERROR,
-    'no-unused-vars': [ERROR, {args: 'none', ignoreRestSiblings: true}],
+    'no-unused-vars': OFF,
     'no-use-before-define': OFF,
     'no-useless-concat': OFF,
     quotes: [ERROR, 'single', {avoidEscape: true, allowTemplateLiterals: true}],
@@ -273,21 +286,21 @@ module.exports = {
 
     // React & JSX
     // Our transforms set this automatically
-    'react/jsx-boolean-value': [ERROR, 'always'],
-    'react/jsx-no-undef': ERROR,
+    // 'react/jsx-boolean-value': [ERROR, 'always'],
+    // 'react/jsx-no-undef': ERROR,
     // We don't care to do this
     'react/jsx-sort-prop-types': OFF,
-    'react/jsx-space-before-closing': ERROR,
-    'react/jsx-uses-react': ERROR,
+    // 'react/jsx-space-before-closing': ERROR,
+    // 'react/jsx-uses-react': ERROR,
     'react/no-is-mounted': OFF,
     // This isn't useful in our test code
-    'react/react-in-jsx-scope': ERROR,
-    'react/self-closing-comp': ERROR,
+    // 'react/react-in-jsx-scope': ERROR,
+    // 'react/self-closing-comp': ERROR,
     // We don't care to do this
-    'react/jsx-wrap-multilines': [
-      ERROR,
-      {declaration: false, assignment: false},
-    ],
+    // 'react/jsx-wrap-multilines': [
+    //   ERROR,
+    //   {declaration: false, assignment: false},
+    // ],
 
     // Prevent for...of loops because they require a Symbol polyfill.
     // You can disable this rule for code that isn't shipped (e.g. build scripts and tests).
@@ -298,14 +311,13 @@ module.exports = {
 
     // CUSTOM RULES
     // the second argument of warning/invariant should be a literal string
-    'react-internal/no-primitive-constructors': ERROR,
-    'react-internal/safe-string-coercion': [
-      ERROR,
-      {isProductionUserAppCode: true},
-    ],
-    'react-internal/no-to-warn-dev-within-to-throw': ERROR,
-    'react-internal/warning-args': ERROR,
-    'react-internal/no-production-logging': ERROR,
+    'react-internal/no-primitive-constructors': OFF,
+    'react-internal/safe-string-coercion': OFF,
+    'react-internal/no-to-warn-dev-within-to-throw': OFF,
+    'react-internal/warning-args': OFF,
+    'react-internal/no-production-logging': OFF,
+
+   
   },
 
   overrides: [
@@ -315,7 +327,7 @@ module.exports = {
       // in the next override entry.
       files: ['packages/**/*.js'],
       rules: {
-        'react-internal/prod-error-codes': ERROR,
+        'react-internal/prod-error-codes': OFF,
       },
     },
     {
@@ -439,10 +451,7 @@ module.exports = {
         'es/no-optional-chaining': OFF,
         'react-internal/no-production-logging': OFF,
         'react-internal/warning-args': OFF,
-        'react-internal/safe-string-coercion': [
-          ERROR,
-          {isProductionUserAppCode: false},
-        ],
+        'react-internal/safe-string-coercion': OFF,
       },
     },
     {

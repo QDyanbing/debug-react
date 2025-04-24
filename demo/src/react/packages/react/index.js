@@ -74,3 +74,7 @@ export {
   useActionState,
   version,
 } from './src/ReactClient';
+
+import * as React from './src/ReactClient';
+
+export default React;
